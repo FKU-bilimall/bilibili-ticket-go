@@ -14,7 +14,13 @@ type GetQRLoginKeyPayload struct {
 
 type VerifyQRLoginStatePayload struct {
 	RefreshToken string `json:"refresh_token"`
-	Timestamp    int    `json:"timestamp"`
+	Timestamp    int64  `json:"timestamp"`
 	Code         int    `json:"code"`
 	Message      string `json:"message"`
+}
+
+type GetLoginInfoPayload struct {
+	Login bool   `json:"isLogin"`
+	Name  string `json:"uname,omitempty"`
+	UID   int64  `json:"mid,omitempty"`
 }
