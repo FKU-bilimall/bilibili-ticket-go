@@ -26,13 +26,16 @@ type Client struct {
 	refreshToken string
 }
 
+var logger = utils.GetLogger("bili-client", nil)
+
 func GetNewClient(jar http.CookieJar, buvid string) *Client {
 	var id = buvid
 	if id == "" {
 		id = utils.GenerateBUVID()
 	}
 	logger.Debugf("Client BUVID: %s", id)
-	c := req.C()
+	c := req.C().EnableDebugLog()
+	c.SetLogger(logger)
 	if jar != nil {
 		c.SetCookieJar(jar)
 	}
@@ -50,8 +53,6 @@ func GetNewClient(jar http.CookieJar, buvid string) *Client {
 		cookie: jar,
 	}
 }
-
-var logger = utils.GetLogger("bili-client", nil)
 
 // GetQRCodeUrlAndKey retrieves the QR code URL and key for Bilibili login.
 func (c *Client) GetQRCodeUrlAndKey() (error, *response.GetQRLoginKeyPayload) {

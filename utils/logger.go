@@ -28,22 +28,27 @@ type ColorfulFormatter struct {
 func (f *ColorfulFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	var levelColor *color.Color
 	switch entry.Level {
+	case logrus.TraceLevel:
+		levelColor, _ = hexToColor("a2cf6e")
 	case logrus.DebugLevel:
 		levelColor, _ = hexToColor("4caf50")
 	case logrus.InfoLevel:
 		levelColor, _ = hexToColor("2196f3")
 	case logrus.WarnLevel:
 		levelColor, _ = hexToColor("ffeb3b")
-	case logrus.ErrorLevel, logrus.FatalLevel, logrus.PanicLevel:
+	case logrus.ErrorLevel:
+		levelColor, _ = hexToColor("f44336")
+	case logrus.FatalLevel, logrus.PanicLevel:
 		levelColor, _ = hexToColor("f44336")
 	default:
 		levelColor, _ = hexToColor("ffffff")
 	}
+
 	return []byte(
 		fmt.Sprintf(
 			"%s | %s | %s | %s\n",
 			entry.Time.Format(time.RFC3339),
-			levelColor.Sprint(strings.ToUpper(entry.Level.String()[0:4])),
+			levelColor.Sprint(strings.ToUpper(entry.Level.String())),
 			strings.ToLower(entry.Data["name"].(string)),
 			entry.Message,
 		),

@@ -50,7 +50,7 @@ func init() {
 }
 
 func main() {
-	logrus.SetLevel(logrus.DebugLevel)
+	logrus.SetLevel(logrus.TraceLevel)
 	utils.RegisterLoggerFormater()
 	defer func() {
 		var ck = jar.AllPersistentEntries()
@@ -141,6 +141,8 @@ func main() {
 								root.RemoveItem(eta)
 								root.RemoveItem(qrv)
 								err, stat := biliClient.GetLoginStatus()
+								conf.Bilibili.RefreshToken = result.RefreshToken
+								conf.Bilibili.LatestRefreshTimestamp = result.Timestamp
 								if err != nil {
 									logrus.Errorf("GetLoginStatus error: %v", err)
 								}
