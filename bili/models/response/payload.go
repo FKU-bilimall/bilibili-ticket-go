@@ -1,10 +1,22 @@
 package response
 
-type Root[T any] struct {
+import (
+	"errors"
+	"fmt"
+)
+
+type DataRoot[T any] struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 	Ttl     int    `json:"ttl"`
 	Data    T      `json:"data"`
+}
+
+func (r *DataRoot[T]) CheckValid() error {
+	if r.Code != 0 {
+		return errors.New(fmt.Sprintf("Response code is not 0, got: %d, message: %s", r.Code, r.Message))
+	}
+	return nil
 }
 
 type GetQRLoginKeyPayload struct {
@@ -33,4 +45,14 @@ type GetBVUID34Payload struct {
 type NeedRefreshPayload struct {
 	NeedRefresh bool  `json:"refresh"`
 	Timestamp   int64 `json:"timestamp"`
+}
+
+type RefreshTokenPayload struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+type BiliTicketPayload struct {
+	Ticket  string `json:"ticket"`
+	Created int64  `json:"create_at"`
+	TTL     int64  `json:"ttl"`
 }

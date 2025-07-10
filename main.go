@@ -78,6 +78,12 @@ func main() {
 			}
 			if stat.Login {
 				t.Write([]byte(fmt.Sprintf("Welcome %s, Your UID is %d", stat.Name, stat.UID)))
+				err, _, s := biliClient.CheckAndUpdateCookie()
+				if err != nil {
+					logger.Errorf("CheckAndUpdateCookie error: %v", err)
+				} else if s != "" {
+					conf.Bilibili.RefreshToken = s
+				}
 			} else {
 				t.Write([]byte("You are not logged in. Please login first."))
 				qrv := tview.NewTextView().SetChangedFunc(func() { app.Draw() })
@@ -157,6 +163,8 @@ func main() {
 			}
 			pages.AddPage("client", root, true, true)
 		}
+		{
+		}
 	}
 	pageContainer.AddItem(pages, 0, 1, false)
 	featureChoose := tview.NewFlex().SetDirection(tview.FlexRow)
@@ -166,6 +174,7 @@ func main() {
 			list := tview.NewList()
 			list.AddItem("Bilibili Client", "Account Info/Login", 'l', func() {})
 			list.AddItem("Logs", "Latest Logs", 'o', func() {})
+			list.AddItem("Ticket", "Ticket Booking", 't', func() {})
 			list.SetSelectedFunc(func(i int, mt string, _ string, _ rune) {
 				pageContainer.SetTitle(strings.ToUpper(mt))
 				switch i {

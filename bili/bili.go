@@ -62,14 +62,17 @@ func GetNewClient(jar http.CookieJar, buvid string) *Client {
 	}
 }
 
-// GetQRCodeUrlAndKey retrieves the QR code URL and key for Bilibili login.
 func (c *Client) GetQRCodeUrlAndKey() (error, *response.GetQRLoginKeyPayload) {
 	res, err := c.http.R().Get("https://passport.bilibili.com/x/passport-login/web/qrcode/generate?source=main-fe-header")
 	if err != nil {
 		return err, nil
 	}
-	var r response.Root[response.GetQRLoginKeyPayload]
+	var r response.DataRoot[response.GetQRLoginKeyPayload]
 	err = res.Unmarshal(&r)
+	if err != nil {
+		return err, nil
+	}
+	err = r.CheckValid()
 	if err != nil {
 		return err, nil
 	}
@@ -85,7 +88,7 @@ func (c *Client) GetQRLoginState(qrcodeKey string) (error, *response.VerifyQRLog
 	if err != nil {
 		return err, nil
 	}
-	var r response.Root[response.VerifyQRLoginStatePayload]
+	var r response.DataRoot[response.VerifyQRLoginStatePayload]
 	err = res.Unmarshal(&r)
 	if err != nil {
 		return err, nil
@@ -127,12 +130,56 @@ func (c *Client) GetLoginStatus() (error, *response.GetLoginInfoPayload) {
 	if err != nil {
 		return err, nil
 	}
-	var r response.Root[response.GetLoginInfoPayload]
+	var r response.DataRoot[response.GetLoginInfoPayload]
 	err = res.Unmarshal(&r)
 	if err != nil {
 		return err, nil
 	}
 	return nil, &r.Data
+}
+
+func (c *Client) CheckAndUpdateCookie() (error, bool, string) {
+	logger.Debug("Checking and updating cookie...")
+	err, st := c.GetLoginStatus()
+	if err != nil {
+		return err, false, ""
+	}
+	if !st.Login {
+		logger.Debugf("User is not logged in, cannot refresh cookie.\n")
+		return nil, false, ""
+	}
+	err, stat := c.checkNeedRefresh()
+	if err != nil || !stat {
+		if !stat {
+			logger.Debug("No need to refresh cookie.")
+		}
+		return err, false, ""
+	}
+	oldCSRF := c.getCSRFFromCookie()
+	logger.Debugf("Old CSRF Token: %s", oldCSRF)
+	oldRefreshToken := c.refreshToken
+	cp, err := getCorrespondPath(time.Now().UnixMilli())
+	if err != nil {
+		return err, false, ""
+	}
+	err, CSRFKey := c.getRefreshCSRF(cp)
+	if err != nil {
+		return err, false, ""
+	}
+	logger.Debugf("CSRF Key: %s", CSRFKey)
+	err, newRefreshToken := c.refreshCookie(oldCSRF, CSRFKey, oldRefreshToken)
+	if err != nil {
+		return err, false, ""
+	}
+	logger.Debugf("New Refresh Token: %s", newRefreshToken)
+	c.refreshToken = newRefreshToken
+	newCSRF := c.getCSRFFromCookie()
+	logger.Debugf("New CSRF Token: %s", newCSRF)
+	err = c.setPreviousCookieInvalid(newCSRF, oldRefreshToken)
+	if err != nil {
+		return err, false, ""
+	}
+	return nil, true, newCSRF
 }
 
 func (c *Client) getBuvid34AndBnut() error {
@@ -141,7 +188,7 @@ func (c *Client) getBuvid34AndBnut() error {
 		return err
 	}
 	res, err := c.http.R().Get("https://api.bilibili.com/x/frontend/finger/spi")
-	var r response.Root[response.GetBVUID34Payload]
+	var r response.DataRoot[response.GetBVUID34Payload]
 	err = res.Unmarshal(&r)
 	if err != nil {
 		return err
@@ -189,15 +236,23 @@ func (c *Client) checkNeedRefresh() (error, bool) {
 	if err != nil {
 		return err, false
 	}
-	var r response.Root[response.NeedRefreshPayload]
+	var r response.DataRoot[response.NeedRefreshPayload]
 	err = res.Unmarshal(&r)
+	if err != nil {
+		return err, false
+	}
+	err = r.CheckValid()
+	if err != nil {
+		return err, false
+	}
+	err = r.CheckValid()
 	if err != nil {
 		return err, false
 	}
 	return nil, r.Data.NeedRefresh
 }
 
-func (c *Client) getRefreshCsrf(correspondPath string) (error, string) {
+func (c *Client) getRefreshCSRF(correspondPath string) (error, string) {
 	res, err := c.http.R().Get(fmt.Sprintf("https://www.bilibili.com/correspond/1/%s", correspondPath))
 	if err != nil {
 		return err, ""
@@ -214,13 +269,46 @@ func (c *Client) getRefreshCsrf(correspondPath string) (error, string) {
 	}
 }
 
-func (c *Client) refreshCookie(refreshCsrfToken string) (error, bool, string) {
-	req, err := c.http.R().SetFormData(map[string]string{
-		"refresh_token": c.refreshToken,
+func (c *Client) refreshCookie(csrf string, refreshCsrfToken string, refreshToken string) (error, string) {
+	res, err := c.http.R().SetFormData(map[string]string{
+		"refresh_token": refreshToken,
 		"source":        "main-fe-header",
 		"csrf_token":    refreshCsrfToken,
-		"csrf":          c.getCSRFFromCookie(),
-	}).Post("https://passport.bilibili.com/x/passport-login/web/confirm/refresh")
+		"csrf":          csrf,
+	}).Post("https://passport.bilibili.com/x/passport-login/web/cookie/refresh")
+	if err != nil {
+		return err, ""
+	}
+	var r response.DataRoot[response.RefreshTokenPayload]
+	err = res.Unmarshal(&r)
+	if err != nil {
+		return err, ""
+	}
+	err = r.CheckValid()
+	if err != nil {
+		return err, ""
+	}
+	return nil, r.Data.RefreshToken
+}
+
+func (c *Client) setPreviousCookieInvalid(newCsrf string, oldRefreshToken string) error {
+	res, err := c.http.R().SetFormData(map[string]string{
+		"refresh_token": oldRefreshToken,
+		"csrf":          newCsrf,
+	}).Post("https://passport.bilibili.com/x/passport-login/web/cookie/refresh")
+	if err != nil {
+		return err
+	}
+	var r response.DataRoot[interface{}]
+	err = res.Unmarshal(&r)
+	if err != nil {
+		return err
+	}
+	err = r.CheckValid()
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (c *Client) getCSRFFromCookie() string {
@@ -231,6 +319,10 @@ func (c *Client) getCSRFFromCookie() string {
 		}
 	}
 	return ""
+}
+
+func (c *Client) GetNewBiliTicker() {
+
 }
 
 func getCorrespondPath(ts int64) (string, error) {
