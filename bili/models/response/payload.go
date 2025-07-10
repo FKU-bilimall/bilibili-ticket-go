@@ -24,3 +24,13 @@ type GetLoginInfoPayload struct {
 	Name  string `json:"uname,omitempty"`
 	UID   int64  `json:"mid,omitempty"`
 }
+
+type GetBVUID34Payload struct {
+	BVUID3 string `json:"b_3"`
+	BVUID4 string `json:"b_4"`
+}
+
+type NeedRefreshPayload struct {
+	NeedRefresh bool  `json:"refresh"`
+	Timestamp   int64 `json:"timestamp"`
+}

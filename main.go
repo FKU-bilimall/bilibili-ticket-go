@@ -7,11 +7,9 @@ import (
 	"bilibili-ticket-go/utils"
 	"fmt"
 	"github.com/fatih/color"
-	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"github.com/sirupsen/logrus"
 	"log"
-	"net/url"
 	"strings"
 	"time"
 )
@@ -20,15 +18,8 @@ var logger = utils.GetLogger("main", nil)
 var biliClient *client.Client = nil
 var conf *models.Configuration = nil
 var jar *cookiejar.Jar = nil
-var stack = (&models.Stack[selectItem]{}).New()
-var selectedPrimitive selectItem
 var app *tview.Application = nil
-var container *tview.Flex = nil
-
-type selectItem struct {
-	FocusedNum int
-	Obj        interface{}
-}
+var pageContainer *tview.Flex = nil
 
 func init() {
 	var err error
@@ -40,11 +31,6 @@ func init() {
 		PublicSuffixList: nil,
 		DefaultCookies:   conf.Bilibili.Cookies,
 	})
-	b, _ := url.ParseRequestURI("https://api.bilibili.com")
-	a := jar.Cookies(b)
-	if len(a) > 0 {
-
-	}
 	biliClient = client.GetNewClient(jar, conf.Bilibili.BUVID)
 	conf.Bilibili.BUVID = biliClient.GetBUVID()
 }
@@ -60,18 +46,19 @@ func main() {
 		conf.Save()
 	}()
 	app = tview.NewApplication().EnableMouse(true).EnablePaste(true)
-	//app.SetInputCapture(keyCapture)
-	container = tview.NewFlex()
-	container.SetBorder(true).SetTitle("BILIBILI CLIENT")
+	pageContainer = tview.NewFlex()
+	pageContainer.SetBorder(true).SetTitle("BILIBILI CLIENT")
 	pages := tview.NewPages()
 	{
 		{
 			t := tview.NewTextView()
 			t.SetDynamicColors(true).
 				SetScrollable(true).
+				SetMaxLines(2000).
 				SetChangedFunc(func() {
 					app.Draw()
 				})
+			t.ScrollToEnd()
 			logrus.SetOutput(tview.ANSIWriter(t))
 			pages.AddPage("logs",
 				tview.NewFlex().SetDirection(tview.FlexRow).AddItem(t, 0, 1, false),
@@ -171,7 +158,7 @@ func main() {
 			pages.AddPage("client", root, true, true)
 		}
 	}
-	container.AddItem(pages, 0, 1, false)
+	pageContainer.AddItem(pages, 0, 1, false)
 	featureChoose := tview.NewFlex().SetDirection(tview.FlexRow)
 	{
 		featureChoose.SetBorder(true).SetTitle("Features")
@@ -180,7 +167,7 @@ func main() {
 			list.AddItem("Bilibili Client", "Account Info/Login", 'l', func() {})
 			list.AddItem("Logs", "Latest Logs", 'o', func() {})
 			list.SetSelectedFunc(func(i int, mt string, _ string, _ rune) {
-				container.SetTitle(strings.ToUpper(mt))
+				pageContainer.SetTitle(strings.ToUpper(mt))
 				switch i {
 				case 0:
 					pages.SwitchToPage("client")
@@ -193,9 +180,9 @@ func main() {
 	}
 	flex := tview.NewFlex().
 		AddItem(featureChoose, 25, 1, false).
-		AddItem(container, 0, 4, false)
-	selectedPrimitive = selectItem{FocusedNum: -1, Obj: nil}
-	stack.Push(selectItem{FocusedNum: -1, Obj: container})
+		AddItem(pageContainer, 0, 4, false)
+	keyboard := NewKeyboardCaptureInstance(app, flex)
+	app.SetInputCapture(keyboard.InputCapture)
 	go func() {
 		logger.Info("It's Bilibili-Ticket-Go!!!!!")
 		logger.Warn(fmt.Sprintf("This is a %s Bilibili Client for ticket booking.", color.New(color.FgHiRed).Sprint("FREE")))
@@ -203,116 +190,5 @@ func main() {
 	}()
 	if err := app.SetRoot(flex, true).Run(); err != nil {
 		log.Fatal(err)
-	}
-}
-
-func keyCapture(key *tcell.EventKey) *tcell.EventKey {
-	if key.Key() == tcell.KeyTab {
-		obj := stack.Top()
-		switch obj := obj.Obj.(type) {
-		case *tview.Flex:
-			{
-				s := stack.Top().FocusedNum + 1
-				var count = 0
-			CHECK:
-				count++
-				if s >= obj.GetItemCount() {
-					if obj.GetItemCount() == 0 {
-						return key
-					}
-					s = 0
-				}
-				item := obj.GetItem(s)
-				if isAllowSkip(item) {
-					if count == obj.GetItemCount() {
-						return key
-					}
-					s++
-					goto CHECK
-				}
-				selectedPrimitive = selectItem{
-					FocusedNum: -1,
-					Obj:        item,
-				}
-				top := stack.Top()
-				stack.Pop()
-				top.FocusedNum = s
-				stack.Push(top)
-			}
-		}
-	} else if key.Key() == tcell.KeyEnter {
-		o, ok := selectedPrimitive.Obj.(tview.Primitive)
-		if ok && selectedPrimitive != stack.Top() {
-			app.SetFocus(o)
-			switch obj := o.(type) {
-			case *tview.Flex:
-				if selectedPrimitive.FocusedNum == -1 {
-					break
-				}
-				item := obj.GetItem(selectedPrimitive.FocusedNum)
-				stack.Push(selectedPrimitive)
-				selectedPrimitive = selectItem{
-					FocusedNum: selectedPrimitive.FocusedNum,
-					Obj:        item,
-				}
-				return key
-			}
-			stack.Push(selectedPrimitive)
-			selectedPrimitive = selectItem{
-				FocusedNum: -1,
-				Obj:        nil,
-			}
-		}
-	} else if key.Key() == tcell.KeyESC {
-		if stack.Size() == 1 {
-			app.SetFocus(container)
-			return key
-		}
-		top := stack.Top()
-		stack.Pop()
-		item := stack.Top()
-		o, ok := item.Obj.(tview.Primitive)
-		if ok {
-			selectedPrimitive = top
-			app.SetFocus(o)
-		}
-	}
-	return key
-}
-
-func setHighlight(oldObj, newObj interface{}) {
-	switch old := oldObj.(type) {
-	case *tview.List:
-		old.SetBorderColor(tcell.ColorWhite)
-	case *tview.Box:
-		old.SetBorderColor(tcell.ColorWhite)
-	case *tview.Flex:
-		old.SetBorderColor(tcell.ColorWhite)
-	case *tview.Grid:
-		old.SetBorderColor(tcell.ColorWhite)
-	case *tview.Button:
-		old.SetStyle(tcell.StyleDefault.Background(tcell.ColorBlue))
-	}
-
-	switch n := newObj.(type) {
-	case *tview.List:
-		n.SetBorderColor(tcell.NewHexColor(0x00cc00))
-	case *tview.Box:
-		n.SetBorderColor(tcell.NewHexColor(0x00cc00))
-	case *tview.Flex:
-		n.SetBorderColor(tcell.NewHexColor(0x00cc00))
-	case *tview.Grid:
-		n.SetBorderColor(tcell.NewHexColor(0x00cc00))
-	case *tview.Button:
-		n.SetStyle(tcell.StyleDefault.Background(tcell.NewHexColor(0xB0C4DE)))
-	}
-}
-
-func isAllowSkip(pri tview.Primitive) bool {
-	switch pri.(type) {
-	case *tview.TextView:
-		return true
-	default:
-		return false
 	}
 }
