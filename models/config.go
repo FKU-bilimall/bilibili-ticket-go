@@ -7,10 +7,10 @@ import (
 )
 
 type Bilibili struct {
-	RefreshToken           string                    `json:"refresh_token"`
-	LatestRefreshTimestamp int64                     `json:"latest_refresh_timestamp"`
-	Cookies                []cookiejar.CookieEntries `json:"cookies"`
-	BUVID                  string                    `json:"BUVID"`
+	RefreshToken string                    `json:"refresh_token"`
+	Cookies      []cookiejar.CookieEntries `json:"cookies"`
+	BUVID        string                    `json:"BUVID"`
+	Fingerprint  string                    `json:"FP"`
 }
 type Configuration struct {
 	Bilibili *Bilibili `json:"bilibili"`
@@ -24,9 +24,8 @@ func NewConfiguration() (*Configuration, error) {
 	v.AddConfigPath(".")
 	v.SetDefault("bilibili",
 		&Bilibili{
-			RefreshToken:           "",
-			LatestRefreshTimestamp: 0,
-			Cookies:                make([]cookiejar.CookieEntries, 0),
+			RefreshToken: "",
+			Cookies:      make([]cookiejar.CookieEntries, 0),
 		},
 	)
 	err := v.SafeWriteConfig()

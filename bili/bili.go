@@ -26,20 +26,28 @@ const appSec = "560c52ccd288fed045859ed18bffd973"
 
 const model = "SM-S9080"
 
+// 2025/07/19 test project_id=103601
 type Client struct {
 	http         *req.Client
 	cookie       http.CookieJar
 	buvid        string
 	refreshToken string
 	appVersion   *response.BiliAppVersionStruct
+	buvidfp      string
+	webglfp      string
+	canvasfp     string
 }
 
 var logger = utils.GetLogger("bili-client", nil)
 
-func GetNewClient(jar http.CookieJar, buvid string, refreshToken string) *Client {
+func GetNewClient(jar http.CookieJar, buvid string, refreshToken string, fingerprint string) *Client {
 	var id = buvid
 	if id == "" {
-		id = utils.GenerateBUVID()
+		id = utils.GenerateXUBUVID()
+	}
+	var fp = fingerprint
+	if fp == "" {
+		fp = utils.GetFpLocal(id, model, "")
 	}
 	logger.Debugf("Client BUVID: %s", id)
 	c := req.C().EnableDebugLog()
@@ -53,6 +61,9 @@ func GetNewClient(jar http.CookieJar, buvid string, refreshToken string) *Client
 		cookie:       jar,
 		appVersion:   ver,
 		refreshToken: refreshToken,
+		buvidfp:      fingerprint,
+		webglfp:      utils.RandomString("0123456789abcdef", 32),
+		canvasfp:     utils.RandomString("0123456789abcdef", 32),
 	}
 	c.SetLogger(logger)
 	if jar != nil {
@@ -60,14 +71,53 @@ func GetNewClient(jar http.CookieJar, buvid string, refreshToken string) *Client
 	}
 	c.SetTLSFingerprintAndroid().
 		ImpersonateChrome()
+	c.SetCommonCookies()
 	c.OnBeforeRequest(func(client *req.Client, req *req.Request) error {
-		req.SetHeader("user-agent", fmt.Sprintf(
-			`Mozilla/5.0 BiliDroid/%s (bbcallen@gmail.com) os/android model/%s mobi_app/android build/%d channel/bili innerVer/%d osVer/12 network/2`,
-			biliClient.appVersion.Version, model, biliClient.appVersion.Build, biliClient.appVersion.Build,
-		))
+		var cookies []*http.Cookie
+		copy(cookies, req.Cookies)
+		if req.URL.Host == "show.bilibili.com" {
+			req.SetHeader("x-requested-with", "tv.danmaku.bili")
+			req.SetHeader("user-agent", fmt.Sprintf(
+				`Mozilla/5.0 BiliDroid/%s (bbcallen@gmail.com) os/android model/%s mobi_app/android build/%d channel/bili innerVer/%d osVer/12 network/2 magent/BILI_H5_ANDROID_12_%s_%d`,
+				biliClient.appVersion.Version, model, biliClient.appVersion.Build, biliClient.appVersion.Build, biliClient.appVersion.Build, biliClient.appVersion.Build,
+			))
+			cookies = append(cookies,
+				&http.Cookie{
+					Name:  "Buvid",
+					Value: biliClient.buvid,
+				}, &http.Cookie{
+					Name:  "deviceFingerprint",
+					Value: biliClient.buvidfp,
+				}, &http.Cookie{
+					Name:  "buvid_fp",
+					Value: biliClient.buvidfp,
+				}, &http.Cookie{
+					Name:  "kfcFrom",
+					Value: "mall_home_searchhis",
+				},
+				&http.Cookie{
+					Name:  "from",
+					Value: "mall_search_discovery",
+				},
+				&http.Cookie{
+					Name:  "kfcSource",
+					Value: "bilibiliapp",
+				},
+				&http.Cookie{
+					Name:  "mSource",
+					Value: "bilibiliapp",
+				},
+			)
+		} else {
+			req.SetHeader("user-agent", fmt.Sprintf(
+				`Mozilla/5.0 BiliDroid/%s (bbcallen@gmail.com) os/android model/%s mobi_app/android build/%d channel/bili innerVer/%d osVer/12 network/2`,
+				biliClient.appVersion.Version, model, biliClient.appVersion.Build, biliClient.appVersion.Build,
+			))
+		}
 		if req.Headers.Get("Referer") != "" {
 			req.SetHeader("Referer", "https://www.bilibili.com/")
 		}
+		req.SetCookies(cookies...)
 		return nil
 	})
 	return biliClient
@@ -91,6 +141,14 @@ func (c *Client) GetQRCodeUrlAndKey() (error, *response.GetQRLoginKeyStruct) {
 
 func (c *Client) GetBUVID() string {
 	return c.buvid
+}
+
+func (c *Client) GetFingerprint() string {
+	return c.buvidfp
+}
+
+func (c *Client) GetRefreshToken() string {
+	return c.refreshToken
 }
 
 func (c *Client) GetQRLoginState(qrcodeKey string) (error, *response.VerifyQRLoginStateStruct) {
@@ -148,38 +206,38 @@ func (c *Client) GetLoginStatus() (error, *response.GetLoginInfoStruct) {
 	return nil, &r.Data
 }
 
-func (c *Client) CheckAndUpdateCookie() (error, bool, string) {
+func (c *Client) CheckAndUpdateCookie() (error, bool) {
 	logger.Debug("Checking and updating cookie...")
 	err, st := c.GetLoginStatus()
 	if err != nil {
-		return err, false, ""
+		return err, false
 	}
 	if !st.Login {
 		logger.Debugf("User is not logged in, cannot refresh cookie.\n")
-		return nil, false, ""
+		return nil, false
 	}
 	err, stat := c.checkNeedRefresh()
 	if err != nil || !stat {
 		if !stat {
 			logger.Debug("No need to refresh cookie.")
 		}
-		return err, false, ""
+		return err, false
 	}
 	oldCSRF := c.getCSRFFromCookie()
 	logger.Debugf("Old CSRF Token: %s", oldCSRF)
 	oldRefreshToken := c.refreshToken
 	cp, err := getCorrespondPath(time.Now().UnixMilli())
 	if err != nil {
-		return err, false, ""
+		return err, false
 	}
 	err, CSRFKey := c.getRefreshCSRF(cp)
 	if err != nil {
-		return err, false, ""
+		return err, false
 	}
 	logger.Debugf("CSRF Key: %s", CSRFKey)
 	err, newRefreshToken := c.refreshCookie(oldCSRF, CSRFKey, oldRefreshToken)
 	if err != nil {
-		return err, false, ""
+		return err, false
 	}
 	logger.Debugf("New Refresh Token: %s", newRefreshToken)
 	c.refreshToken = newRefreshToken
@@ -187,9 +245,9 @@ func (c *Client) CheckAndUpdateCookie() (error, bool, string) {
 	logger.Debugf("New CSRF Token: %s", newCSRF)
 	err = c.setPreviousCookieInvalid(newCSRF, oldRefreshToken)
 	if err != nil {
-		return err, false, ""
+		return err, false
 	}
-	return nil, true, newCSRF
+	return nil, true
 }
 
 func (c *Client) getBuvid34AndBnut() error {

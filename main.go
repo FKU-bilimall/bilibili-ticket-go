@@ -33,8 +33,9 @@ func init() {
 		PublicSuffixList: nil,
 		DefaultCookies:   conf.Bilibili.Cookies,
 	})
-	biliClient = client.GetNewClient(jar, conf.Bilibili.BUVID, conf.Bilibili.RefreshToken)
+	biliClient = client.GetNewClient(jar, conf.Bilibili.BUVID, conf.Bilibili.RefreshToken, conf.Bilibili.Fingerprint)
 	conf.Bilibili.BUVID = biliClient.GetBUVID()
+	conf.Bilibili.Fingerprint = biliClient.GetFingerprint()
 }
 
 func main() {
@@ -45,6 +46,7 @@ func main() {
 		if ck != nil {
 			conf.Bilibili.Cookies = ck
 		}
+		conf.Bilibili.RefreshToken = biliClient.GetRefreshToken()
 		conf.Save()
 	}()
 	app = tview.NewApplication().EnableMouse(true).EnablePaste(true)
@@ -80,11 +82,9 @@ func main() {
 			}
 			if stat.Login {
 				t.Write([]byte(fmt.Sprintf("Welcome %s, Your UID is %d", stat.Name, stat.UID)))
-				err, _, s := biliClient.CheckAndUpdateCookie()
+				err, _ := biliClient.CheckAndUpdateCookie()
 				if err != nil {
 					logger.Errorf("CheckAndUpdateCookie error: %v", err)
-				} else if s != "" {
-					conf.Bilibili.RefreshToken = s
 				}
 			} else {
 				t.Write([]byte("You are not logged in. Please login first."))
@@ -141,8 +141,6 @@ func main() {
 									root.RemoveItem(eta)
 									root.RemoveItem(qrv)
 									err, stat := biliClient.GetLoginStatus()
-									conf.Bilibili.RefreshToken = result.RefreshToken
-									conf.Bilibili.LatestRefreshTimestamp = result.Timestamp
 									if err != nil {
 										logrus.Errorf("GetLoginStatus error: %v", err)
 									}
