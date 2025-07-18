@@ -8,7 +8,6 @@ import (
 type DataRoot[T any] struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
-	Ttl     int    `json:"ttl"`
 	Data    T      `json:"data"`
 }
 
@@ -19,40 +18,45 @@ func (r *DataRoot[T]) CheckValid() error {
 	return nil
 }
 
-type GetQRLoginKeyPayload struct {
+type GetQRLoginKeyStruct struct {
 	URL       string `json:"url"`
 	QRCodeKey string `json:"qrcode_key"`
 }
 
-type VerifyQRLoginStatePayload struct {
+type VerifyQRLoginStateStruct struct {
 	RefreshToken string `json:"refresh_token"`
 	Timestamp    int64  `json:"timestamp"`
 	Code         int    `json:"code"`
 	Message      string `json:"message"`
 }
 
-type GetLoginInfoPayload struct {
+type GetLoginInfoStruct struct {
 	Login bool   `json:"isLogin"`
 	Name  string `json:"uname,omitempty"`
 	UID   int64  `json:"mid,omitempty"`
 }
 
-type GetBVUID34Payload struct {
+type GetBVUID34Struct struct {
 	BVUID3 string `json:"b_3"`
 	BVUID4 string `json:"b_4"`
 }
 
-type NeedRefreshPayload struct {
+type NeedRefreshStruct struct {
 	NeedRefresh bool  `json:"refresh"`
 	Timestamp   int64 `json:"timestamp"`
 }
 
-type RefreshTokenPayload struct {
+type RefreshTokenStruct struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-type BiliTicketPayload struct {
+type BiliTicketStruct struct {
 	Ticket  string `json:"ticket"`
-	Created int64  `json:"create_at"`
-	TTL     int64  `json:"ttl"`
+	Created int    `json:"create_at"`
+	TTL     int    `json:"ttl"`
+}
+
+type BiliAppVersionStruct struct {
+	Version string `json:"version"`
+	Build   int    `json:"build"`
 }

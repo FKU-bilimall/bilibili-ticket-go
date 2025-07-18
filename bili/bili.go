@@ -23,8 +23,7 @@ import (
 
 const appKey = "1d8b6e7d45233436"
 const appSec = "560c52ccd288fed045859ed18bffd973"
-const stringVer = "8.51.0"
-const buildVer = 8510500
+
 const model = "SM-S9080"
 
 type Client struct {
@@ -32,48 +31,59 @@ type Client struct {
 	cookie       http.CookieJar
 	buvid        string
 	refreshToken string
+	appVersion   *response.BiliAppVersionStruct
 }
 
 var logger = utils.GetLogger("bili-client", nil)
 
-func GetNewClient(jar http.CookieJar, buvid string) *Client {
+func GetNewClient(jar http.CookieJar, buvid string, refreshToken string) *Client {
 	var id = buvid
 	if id == "" {
 		id = utils.GenerateBUVID()
 	}
 	logger.Debugf("Client BUVID: %s", id)
 	c := req.C().EnableDebugLog()
+	err, ver := getAppLatestVersion()
+	if err != nil {
+		return nil
+	}
+	biliClient := &Client{
+		http:         c,
+		buvid:        id,
+		cookie:       jar,
+		appVersion:   ver,
+		refreshToken: refreshToken,
+	}
 	c.SetLogger(logger)
 	if jar != nil {
 		c.SetCookieJar(jar)
 	}
-	c.SetUserAgent(fmt.Sprintf(
-		`Mozilla/5.0 BiliDroid/%s (bbcallen@gmail.com) os/android model/%s mobi_app/android build/%d channel/bili innerVer/%d osVer/12 network/2`,
-		stringVer, model, buildVer, buildVer,
-	)).
-		SetCommonHeader("app-key", "android64").
-		SetCommonHeader("buvid", id).
-		SetTLSFingerprintAndroid().
+	c.SetTLSFingerprintAndroid().
 		ImpersonateChrome()
-	return &Client{
-		http:   c,
-		buvid:  id,
-		cookie: jar,
-	}
+	c.OnBeforeRequest(func(client *req.Client, req *req.Request) error {
+		req.SetHeader("user-agent", fmt.Sprintf(
+			`Mozilla/5.0 BiliDroid/%s (bbcallen@gmail.com) os/android model/%s mobi_app/android build/%d channel/bili innerVer/%d osVer/12 network/2`,
+			biliClient.appVersion.Version, model, biliClient.appVersion.Build, biliClient.appVersion.Build,
+		))
+		if req.Headers.Get("Referer") != "" {
+			req.SetHeader("Referer", "https://www.bilibili.com/")
+		}
+		return nil
+	})
+	return biliClient
 }
 
-func (c *Client) GetQRCodeUrlAndKey() (error, *response.GetQRLoginKeyPayload) {
+func (c *Client) GetQRCodeUrlAndKey() (error, *response.GetQRLoginKeyStruct) {
 	res, err := c.http.R().Get("https://passport.bilibili.com/x/passport-login/web/qrcode/generate?source=main-fe-header")
 	if err != nil {
 		return err, nil
 	}
-	var r response.DataRoot[response.GetQRLoginKeyPayload]
+	var r response.DataRoot[response.GetQRLoginKeyStruct]
 	err = res.Unmarshal(&r)
 	if err != nil {
 		return err, nil
 	}
-	err = r.CheckValid()
-	if err != nil {
+	if err = r.CheckValid(); err != nil {
 		return err, nil
 	}
 	return nil, &r.Data
@@ -83,12 +93,12 @@ func (c *Client) GetBUVID() string {
 	return c.buvid
 }
 
-func (c *Client) GetQRLoginState(qrcodeKey string) (error, *response.VerifyQRLoginStatePayload) {
+func (c *Client) GetQRLoginState(qrcodeKey string) (error, *response.VerifyQRLoginStateStruct) {
 	res, err := c.http.R().SetQueryParam("qrcode_key", qrcodeKey).Get("https://passport.bilibili.com/x/passport-login/web/qrcode/poll")
 	if err != nil {
 		return err, nil
 	}
-	var r response.DataRoot[response.VerifyQRLoginStatePayload]
+	var r response.DataRoot[response.VerifyQRLoginStateStruct]
 	err = res.Unmarshal(&r)
 	if err != nil {
 		return err, nil
@@ -125,12 +135,12 @@ func (c *Client) AppSignWithQueries(req req.Request) req.Request {
 	return req
 }
 
-func (c *Client) GetLoginStatus() (error, *response.GetLoginInfoPayload) {
+func (c *Client) GetLoginStatus() (error, *response.GetLoginInfoStruct) {
 	res, err := c.http.R().Get("https://api.bilibili.com/x/web-interface/nav")
 	if err != nil {
 		return err, nil
 	}
-	var r response.DataRoot[response.GetLoginInfoPayload]
+	var r response.DataRoot[response.GetLoginInfoStruct]
 	err = res.Unmarshal(&r)
 	if err != nil {
 		return err, nil
@@ -188,7 +198,7 @@ func (c *Client) getBuvid34AndBnut() error {
 		return err
 	}
 	res, err := c.http.R().Get("https://api.bilibili.com/x/frontend/finger/spi")
-	var r response.DataRoot[response.GetBVUID34Payload]
+	var r response.DataRoot[response.GetBVUID34Struct]
 	err = res.Unmarshal(&r)
 	if err != nil {
 		return err
@@ -212,7 +222,7 @@ func (c *Client) getBuvid34AndBnut() error {
 			Unparsed:    nil,
 		},
 		{
-			Name:        "buvid3",
+			Name:        "buvid4",
 			Value:       r.Data.BVUID4,
 			Quoted:      false,
 			Path:        "/",
@@ -236,17 +246,12 @@ func (c *Client) checkNeedRefresh() (error, bool) {
 	if err != nil {
 		return err, false
 	}
-	var r response.DataRoot[response.NeedRefreshPayload]
+	var r response.DataRoot[response.NeedRefreshStruct]
 	err = res.Unmarshal(&r)
 	if err != nil {
 		return err, false
 	}
-	err = r.CheckValid()
-	if err != nil {
-		return err, false
-	}
-	err = r.CheckValid()
-	if err != nil {
+	if err = r.CheckValid(); err != nil {
 		return err, false
 	}
 	return nil, r.Data.NeedRefresh
@@ -279,13 +284,12 @@ func (c *Client) refreshCookie(csrf string, refreshCsrfToken string, refreshToke
 	if err != nil {
 		return err, ""
 	}
-	var r response.DataRoot[response.RefreshTokenPayload]
+	var r response.DataRoot[response.RefreshTokenStruct]
 	err = res.Unmarshal(&r)
 	if err != nil {
 		return err, ""
 	}
-	err = r.CheckValid()
-	if err != nil {
+	if err = r.CheckValid(); err != nil {
 		return err, ""
 	}
 	return nil, r.Data.RefreshToken
@@ -304,8 +308,7 @@ func (c *Client) setPreviousCookieInvalid(newCsrf string, oldRefreshToken string
 	if err != nil {
 		return err
 	}
-	err = r.CheckValid()
-	if err != nil {
+	if err = r.CheckValid(); err != nil {
 		return err
 	}
 	return nil
@@ -321,8 +324,68 @@ func (c *Client) getCSRFFromCookie() string {
 	return ""
 }
 
-func (c *Client) GetNewBiliTicker() {
+func (c *Client) RefreshNewBiliTicket() (error, bool) {
+	parsedURL, _ := url.Parse("https://www.bilibili.com/")
+	for _, cookie := range c.cookie.Cookies(parsedURL) {
+		if cookie.Name == "bili_ticket" {
+			if cookie.Expires.Sub(time.Now()) >= 1*time.Minute {
+				return nil, false
+			}
+		}
+	}
+	ts := time.Now().UnixMilli()
+	hexsign := utils.HmacSha256ToHex("XgwSnGZ1p", fmt.Sprintf("ts%d", ts))
+	res, err := c.http.R().SetFormData(map[string]string{
+		"key_id":      "ec02",
+		"hexsign":     hexsign,
+		"context[ts]": fmt.Sprintf("%d", ts),
+	}).Post("https://api.bilibili.com/bapis/bilibili.api.ticket.v1.Ticket/GenWebTicket")
+	if err != nil {
+		return err, false
+	}
+	var r response.DataRoot[response.BiliTicketStruct]
+	err = res.Unmarshal(&r)
+	if err != nil {
+		return err, false
+	}
+	if err = r.CheckValid(); err != nil {
+		return err, false
+	}
+	c.cookie.SetCookies(parsedURL, []*http.Cookie{
+		{
+			Name:        "bili_ticket",
+			Value:       r.Data.Ticket,
+			Quoted:      false,
+			Path:        "/",
+			Domain:      "bilibili.com",
+			Expires:     time.Time{},
+			RawExpires:  "",
+			MaxAge:      r.Data.TTL,
+			Secure:      false,
+			HttpOnly:    false,
+			SameSite:    0,
+			Partitioned: false,
+			Raw:         "",
+			Unparsed:    nil,
+		},
+	})
+	return nil, false
+}
 
+func getAppLatestVersion() (error, *response.BiliAppVersionStruct) {
+	res, err := req.Get("https://app.bilibili.com/x/v2/version?mobi_app=android")
+	if err != nil {
+		return err, nil
+	}
+	var r response.DataRoot[[]response.BiliAppVersionStruct]
+	err = res.Unmarshal(&r)
+	if err != nil {
+		return err, nil
+	}
+	if err = r.CheckValid(); err != nil {
+		return err, nil
+	}
+	return nil, &r.Data[0]
 }
 
 func getCorrespondPath(ts int64) (string, error) {
