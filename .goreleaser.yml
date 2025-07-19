@@ -1,0 +1,31 @@
+version: 2
+project_name: bilibili-ticket-go
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: bilibili-ticket-go-obf
+    main: main.go
+    goos:
+      - windows
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags: -s -w
+    env:
+      - CGO_ENABLED=0
+    tool: garble
+    binary: bilibili-ticket-go-obf
+    command: "-literals"
+    flags: [ "build" ]
+
+archives:
+  - formats: zip
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}_obf"
+
+checksum:
+  name_template: "checksums.txt"

@@ -67,3 +67,39 @@ type WbiStruct struct {
 		SubUrl string `json:"sub_url"`
 	} `json:"wbi_img"`
 }
+
+type TicketProjectInformationStruct struct {
+	Id         int    `json:"id"`
+	Name       string `json:"name"`
+	SaleBegin  int    `json:"sale_begin"`
+	SaleEnd    int    `json:"sale_end"`
+	HotProject bool   `json:"hotProject"`
+	ScreenList []struct {
+		SaleFlag struct {
+			Number      int    `json:"number"`
+			DisplayName string `json:"display_name"`
+		} `json:"saleFlag"`
+		Id           int    `json:"id"`
+		StartTime    int    `json:"start_time"`
+		StartTimeStr string `json:"start_time_str"`
+		Name         string `json:"name"`
+		Type         int    `json:"type"`
+		TicketType   int    `json:"ticket_type"`
+		ScreenType   int    `json:"screen_type"`
+		DeliveryType int    `json:"delivery_type"`
+		PickSeat     int    `json:"pick_seat"`
+		TicketList   []struct {
+			Price     int    `json:"price"`
+			Desc      string `json:"desc"`
+			SaleStart int64  `json:"saleStart"`
+			SaleEnd   int64  `json:"saleEnd"`
+			IsSale    int    `json:"is_sale"`
+			Id        int    `json:"id"`
+			SaleFlag  struct {
+				Number      int    `json:"number"`
+				DisplayName string `json:"display_name"`
+			} `json:"sale_flag"`
+			ScreenName string `json:"screen_name"`
+		} `json:"ticket_list"`
+	} `json:"screen_list"`
+}
