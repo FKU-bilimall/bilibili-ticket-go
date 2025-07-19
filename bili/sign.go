@@ -21,6 +21,7 @@ var mixinKeyEncTab = [64]int{46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3
 
 const appKey = "1d8b6e7d45233436"
 const appSec = "560c52ccd288fed045859ed18bffd973"
+const screenInfo = "1699*834*24" // format: screen.width + "*" + screen.height + "*" + screen.colorDepth
 
 func (w *wbiKey) isExpired() bool {
 	return time.Now().After(w.expire)
@@ -56,7 +57,7 @@ func (c *Client) refreshWbiToken() error {
 	return nil
 }
 
-func (c *Client) GetSignedParameterWithAbi(forceUpdate bool, u *url.URL) error {
+func (c *Client) getSignedParameterWithAbi(forceUpdate bool, u *url.URL) error {
 	if c.wbi == nil || c.wbi.isExpired() || forceUpdate {
 		err := c.refreshWbiToken()
 		if err != nil {
@@ -90,4 +91,9 @@ func (c *Client) identifyCookieSign() http.Cookie {
 		Name:  "identify",
 		Value: u.Query().Encode(),
 	}
+}
+
+func getFeSign(ua string, canvasFp string, webglFp string) string {
+	h1, h2 := utils.MurmurX64Hash128(fmt.Sprintf("%s~%s~%s~%s", canvasFp, webglFp, screenInfo, ua), 31)
+	return fmt.Sprintf("%016x%016x", h1, h2)
 }

@@ -113,6 +113,14 @@ func GetNewClient(jar http.CookieJar, buvid string, refreshToken string, fingerp
 						Name:  "mSource",
 						Value: "bilibiliapp",
 					},
+					&http.Cookie{
+						Name:  "feSign",
+						Value: getFeSign(ua, biliClient.canvasfp, biliClient.webglfp),
+					},
+					&http.Cookie{
+						Name:  "screenInfo",
+						Value: screenInfo,
+					},
 				)
 			}
 			if req.Headers.Get("Referer") != "" {

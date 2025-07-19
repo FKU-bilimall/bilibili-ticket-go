@@ -36,7 +36,6 @@ func init() {
 
 func main() {
 	u, _ := url.Parse("https://mall.bilibili.com/neul-next/circle/index.html?page=circle_home&noTitleBar=1&loadingShow=1&prerender=1")
-	biliClient.GetSignedParameterWithAbi(true, u)
 	fmt.Println(u.String())
 	/*	logrus.SetLevel(logrus.TraceLevel)
 		utils.RegisterLoggerFormater()
