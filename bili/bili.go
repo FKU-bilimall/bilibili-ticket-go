@@ -3,7 +3,6 @@ package bili
 import (
 	"bilibili-ticket-go/bili/models/response"
 	"bilibili-ticket-go/utils"
-	"crypto/md5"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -16,17 +15,13 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
-	"sort"
-	"strings"
 	"time"
 )
-
-const appKey = "1d8b6e7d45233436"
-const appSec = "560c52ccd288fed045859ed18bffd973"
 
 const model = "SM-S9080"
 
 // 2025/07/19 test project_id=103601
+
 type Client struct {
 	http         *req.Client
 	cookie       http.CookieJar
@@ -36,6 +31,7 @@ type Client struct {
 	buvidfp      string
 	webglfp      string
 	canvasfp     string
+	wbi          *wbiKey
 }
 
 var logger = utils.GetLogger("bili-client", nil)
@@ -64,6 +60,7 @@ func GetNewClient(jar http.CookieJar, buvid string, refreshToken string, fingerp
 		buvidfp:      fingerprint,
 		webglfp:      utils.RandomString("0123456789abcdef", 32),
 		canvasfp:     utils.RandomString("0123456789abcdef", 32),
+		wbi:          &wbiKey{},
 	}
 	c.SetLogger(logger)
 	if jar != nil {
@@ -72,53 +69,61 @@ func GetNewClient(jar http.CookieJar, buvid string, refreshToken string, fingerp
 	c.SetTLSFingerprintAndroid().
 		ImpersonateChrome()
 	c.SetCommonCookies()
-	c.OnBeforeRequest(func(client *req.Client, req *req.Request) error {
-		var cookies []*http.Cookie
-		copy(cookies, req.Cookies)
-		if req.URL.Host == "show.bilibili.com" {
-			req.SetHeader("x-requested-with", "tv.danmaku.bili")
-			req.SetHeader("user-agent", fmt.Sprintf(
-				`Mozilla/5.0 BiliDroid/%s (bbcallen@gmail.com) os/android model/%s mobi_app/android build/%d channel/bili innerVer/%d osVer/12 network/2 magent/BILI_H5_ANDROID_12_%s_%d`,
-				biliClient.appVersion.Version, model, biliClient.appVersion.Build, biliClient.appVersion.Build, biliClient.appVersion.Build, biliClient.appVersion.Build,
-			))
-			cookies = append(cookies,
-				&http.Cookie{
-					Name:  "Buvid",
-					Value: biliClient.buvid,
-				}, &http.Cookie{
-					Name:  "deviceFingerprint",
-					Value: biliClient.buvidfp,
-				}, &http.Cookie{
-					Name:  "buvid_fp",
-					Value: biliClient.buvidfp,
-				}, &http.Cookie{
-					Name:  "kfcFrom",
-					Value: "mall_home_searchhis",
-				},
-				&http.Cookie{
-					Name:  "from",
-					Value: "mall_search_discovery",
-				},
-				&http.Cookie{
-					Name:  "kfcSource",
-					Value: "bilibiliapp",
-				},
-				&http.Cookie{
-					Name:  "mSource",
-					Value: "bilibiliapp",
-				},
-			)
-		} else {
-			req.SetHeader("user-agent", fmt.Sprintf(
+	c.WrapRoundTripFunc(func(rt req.RoundTripper) req.RoundTripFunc {
+		return func(req *req.Request) (resp *req.Response, err error) {
+			//Before
+			var cookies []*http.Cookie
+			var ua = fmt.Sprintf(
 				`Mozilla/5.0 BiliDroid/%s (bbcallen@gmail.com) os/android model/%s mobi_app/android build/%d channel/bili innerVer/%d osVer/12 network/2`,
 				biliClient.appVersion.Version, model, biliClient.appVersion.Build, biliClient.appVersion.Build,
-			))
+			)
+			copy(cookies, req.Cookies)
+			if req.URL.Host == "show.bilibili.com" {
+				req.SetHeader("x-requested-with", "tv.danmaku.bili")
+				ua = fmt.Sprintf(
+					`Mozilla/5.0 (Linux; Android 12; %s; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/101.0.4951.61 Safari/537.36 BiliApp/%d mobi_app/android isNotchWindow/0 NotchHeight=24 mallVersion/%d mVersion/312 disable_rcmd/0 magent/BILI_H5_ANDROID_12_%s_%d`,
+					model, biliClient.appVersion.Build, biliClient.appVersion.Build, biliClient.appVersion.Version, biliClient.appVersion.Build,
+				)
+				cookies = append(cookies,
+					&http.Cookie{
+						Name:  "Buvid",
+						Value: biliClient.buvid,
+					},
+					&http.Cookie{
+						Name:  "deviceFingerprint",
+						Value: biliClient.buvidfp,
+					},
+					&http.Cookie{
+						Name:  "buvid_fp",
+						Value: biliClient.buvidfp,
+					},
+					&http.Cookie{
+						Name:  "kfcFrom",
+						Value: "mall_home_searchhis",
+					},
+					&http.Cookie{
+						Name:  "from",
+						Value: "mall_search_discovery",
+					},
+					&http.Cookie{
+						Name:  "kfcSource",
+						Value: "bilibiliapp",
+					},
+					&http.Cookie{
+						Name:  "mSource",
+						Value: "bilibiliapp",
+					},
+				)
+			}
+			if req.Headers.Get("Referer") != "" {
+				req.SetHeader("Referer", "https://www.bilibili.com/")
+			}
+			req.SetHeader("User-Agent", ua)
+			req.SetCookies(cookies...)
+			resp, err = rt.RoundTrip(req)
+			//After
+			return resp, err
 		}
-		if req.Headers.Get("Referer") != "" {
-			req.SetHeader("Referer", "https://www.bilibili.com/")
-		}
-		req.SetCookies(cookies...)
-		return nil
 	})
 	return biliClient
 }
@@ -169,28 +174,6 @@ func (c *Client) GetQRLoginState(qrcodeKey string) (error, *response.VerifyQRLog
 		}
 	}
 	return nil, &r.Data
-}
-
-func (c *Client) AppSignWithQueries(req req.Request) req.Request {
-	query := req.URL.Query()
-	var keys []string
-	for key := range query {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	var sortedParams []string
-	for _, key := range keys {
-		values := query[key]
-		for _, value := range values {
-			sortedParams = append(sortedParams, fmt.Sprintf("%s=%s", key, value))
-		}
-	}
-	sortedQueryString := strings.Join(sortedParams, "&")
-	encoded := url.QueryEscape(sortedQueryString) + appSec
-	sign := hex.EncodeToString(md5.New().Sum([]byte(encoded)))
-	logger.Debugf("Queries: %s, App Sign: %s", sortedQueryString, sign)
-	req.URL.Query().Set("sign", sign)
-	return req
 }
 
 func (c *Client) GetLoginStatus() (error, *response.GetLoginInfoStruct) {

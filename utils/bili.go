@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/rand"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -100,4 +101,18 @@ func RandomString(charset string, length int) string {
 		output.WriteByte(charset[rand.Intn(len(charset))])
 	}
 	return output.String()
+}
+
+func GetFileNameWithoutExt(path string) string {
+	filename := filepath.Base(path)
+	nameWithoutExt := strings.TrimSuffix(filename, filepath.Ext(filename))
+	return nameWithoutExt
+}
+
+func IsNextDayInCST(from time.Time, target time.Time) bool {
+	loc, _ := time.LoadLocation("Asia/Shanghai")
+	now := from.In(loc)
+	afterHour := target.In(loc)
+
+	return now.Format("20060102") != afterHour.Format("20060102")
 }

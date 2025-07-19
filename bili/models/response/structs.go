@@ -60,3 +60,10 @@ type BiliAppVersionStruct struct {
 	Version string `json:"version"`
 	Build   int    `json:"build"`
 }
+
+type WbiStruct struct {
+	WbiImg struct {
+		ImgUrl string `json:"img_url"`
+		SubUrl string `json:"sub_url"`
+	} `json:"wbi_img"`
+}
