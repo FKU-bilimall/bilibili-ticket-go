@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bilibili-ticket-go/global"
 	"bilibili-ticket-go/models"
 	"bilibili-ticket-go/utils"
 	"github.com/gdamore/tcell/v2"
@@ -19,7 +20,7 @@ type KeyboardCaptureInstance struct {
 	selected selectItem
 }
 
-var klogger = utils.GetLogger("keyboard", nil)
+var klogger = utils.GetLogger(global.GetLogger(), "keyboard", nil)
 
 func NewKeyboardCaptureInstance(app *tview.Application, root *tview.Flex) *KeyboardCaptureInstance {
 	app.SetFocus(root)

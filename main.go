@@ -2,10 +2,13 @@ package main
 
 import (
 	client "bilibili-ticket-go/bili"
+	"bilibili-ticket-go/global"
 	"bilibili-ticket-go/models"
 	"bilibili-ticket-go/models/cookiejar"
+	"bilibili-ticket-go/models/hooks"
 	"bilibili-ticket-go/utils"
 	"fmt"
+	"github.com/DeRuina/timberjack"
 	"github.com/fatih/color"
 	"github.com/imroc/req/v3"
 	"github.com/rivo/tview"
@@ -15,15 +18,37 @@ import (
 	"time"
 )
 
-var logger = utils.GetLogger("main", nil)
+var logger = utils.GetLogger(global.GetLogger(), "main", nil)
 var biliClient *client.Client = nil
 var conf *models.Configuration = nil
 var jar *cookiejar.Jar = nil
 var app *tview.Application = nil
 var pageContainer *tview.Flex = nil
+var loggerTextview *tview.TextView = nil
+var fileLogger = &timberjack.Logger{
+	Filename:         "logs/latest.log",     // Choose an appropriate path
+	MaxSize:          100,                   // megabytes
+	MaxBackups:       3,                     // backups
+	MaxAge:           7,                     // days
+	Compress:         true,                  // default: false
+	LocalTime:        false,                 // default: false (use UTC)
+	RotationInterval: time.Hour * 24,        // Rotate daily if no other rotation met
+	BackupTimeFormat: "2006-01-02-15-04-05", // Rotated files will have format <logfilename>-2006-01-02-15-04-05-<rotationCriterion>-timberjack.log
+}
 
 func init() {
-	req.SetDefaultClient(req.DefaultClient().SetLogger(utils.GetLogger("network", nil)).EnableDebugLog())
+	global.GetLogger().AddHook(hooks.NewLogFileRotateHook(fileLogger))
+	loggerTextview = tview.NewTextView()
+	loggerTextview.SetDynamicColors(true).
+		SetScrollable(true).
+		SetMaxLines(2000).
+		SetChangedFunc(func() {
+			if app != nil {
+				app.Draw()
+			}
+		})
+	global.GetLogger().SetOutput(tview.ANSIWriter(loggerTextview))
+	req.SetDefaultClient(req.DefaultClient().SetLogger(utils.GetLogger(global.GetLogger(), "network", nil)).EnableDebugLog())
 	var err error
 	conf, err = models.NewConfiguration()
 	if err != nil {
@@ -39,8 +64,7 @@ func init() {
 }
 
 func main() {
-	logrus.SetLevel(logrus.TraceLevel)
-	utils.RegisterLoggerFormater()
+	defer fileLogger.Close()
 	defer func() {
 		var ck = jar.AllPersistentEntries()
 		if ck != nil {
@@ -55,17 +79,9 @@ func main() {
 	pages := tview.NewPages()
 	{
 		{
-			t := tview.NewTextView()
-			t.SetDynamicColors(true).
-				SetScrollable(true).
-				SetMaxLines(2000).
-				SetChangedFunc(func() {
-					app.Draw()
-				})
-			t.ScrollToEnd()
-			logrus.SetOutput(tview.ANSIWriter(t))
+			loggerTextview.ScrollToEnd()
 			pages.AddPage("logs",
-				tview.NewFlex().SetDirection(tview.FlexRow).AddItem(t, 0, 1, false),
+				tview.NewFlex().SetDirection(tview.FlexRow).AddItem(loggerTextview, 0, 1, false),
 				true,
 				false)
 		}
@@ -200,13 +216,26 @@ func main() {
 	flex := tview.NewFlex().
 		AddItem(featureChoose, 25, 1, false).
 		AddItem(pageContainer, 0, 4, false)
-	keyboard := NewKeyboardCaptureInstance(app, flex)
-	app.SetInputCapture(keyboard.InputCapture)
+	//keyboard := NewKeyboardCaptureInstance(app, flex)
+	//app.SetInputCapture(keyboard.InputCapture)
 	go func() {
 		logger.Info("It's Bilibili-Ticket-Go!!!!!")
 		logger.Warn(fmt.Sprintf("This is a %s Bilibili Client for ticket booking.", color.New(color.FgHiRed).Sprint("FREE")))
 		logger.Info("Under the AGPLv3 License.")
-		biliClient.RefreshNewBiliTicket()
+		err, r := biliClient.GetLoginStatus()
+		if err != nil {
+			logger.Errorf("Something went wrong when get logging status, %v", err)
+		}
+		if r.Login {
+			err, b := biliClient.RefreshNewBiliTicket()
+			if err != nil {
+				logger.Errorf("Something went wrong when refreshing bili-ticket, %v", err)
+			} else if !b {
+				logger.Info("No need to refresh bili-ticket, it is still valid.")
+			} else {
+				logger.Info("Bili-ticket refreshed successfully.")
+			}
+		}
 	}()
 	if err := app.SetRoot(flex, true).Run(); err != nil {
 		log.Fatal(err)

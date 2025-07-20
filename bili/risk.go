@@ -239,7 +239,7 @@ func (c *Client) RefreshNewBiliTicket() (error, bool) {
 			Unparsed:    nil,
 		},
 	})
-	return nil, false
+	return nil, true
 }
 
 func getAppLatestVersion() (error, *response.BiliAppVersionStruct) {

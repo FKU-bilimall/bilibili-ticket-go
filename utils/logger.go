@@ -11,15 +11,15 @@ import (
 type LogAdditionalParts struct {
 }
 
-func GetLogger(name string, parts *LogAdditionalParts) *logrus.Entry {
-	return logrus.WithFields(logrus.Fields{
+func GetLogger(instance *logrus.Logger, name string, parts *LogAdditionalParts) *logrus.Entry {
+	return instance.WithFields(logrus.Fields{
 		"name":  name,
 		"parts": parts,
 	})
 }
 
-func RegisterLoggerFormater() {
-	logrus.SetFormatter(&ColorfulFormatter{})
+func RegisterLoggerFormater(instance *logrus.Logger) {
+	instance.SetFormatter(&ColorfulFormatter{})
 }
 
 type ColorfulFormatter struct {

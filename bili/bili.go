@@ -2,6 +2,7 @@ package bili
 
 import (
 	"bilibili-ticket-go/bili/models/response"
+	"bilibili-ticket-go/global"
 	"bilibili-ticket-go/utils"
 	"fmt"
 	"github.com/imroc/req/v3"
@@ -24,7 +25,7 @@ type Client struct {
 	wbi          *wbiKey
 }
 
-var logger = utils.GetLogger("bili-client", nil)
+var logger = utils.GetLogger(global.GetLogger(), "bili-client", nil)
 
 func GetNewClient(jar http.CookieJar, buvid string, refreshToken string, fingerprint string) *Client {
 	var id = buvid
@@ -167,6 +168,10 @@ func (c *Client) GetQRLoginState(qrcodeKey string) (error, *response.VerifyQRLog
 	c.refreshToken = r.Data.RefreshToken
 	if r.Code == 0 {
 		err := c.getBuvid34AndBnut()
+		if err != nil {
+			return err, nil
+		}
+		err, _ = c.RefreshNewBiliTicket()
 		if err != nil {
 			return err, nil
 		}

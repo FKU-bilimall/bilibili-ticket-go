@@ -1,3 +1,5 @@
+github.com/DeRuina/timberjack v1.3.1 h1:BLc/BybPNSsdrFQb3pXSR6XcDRS73bvEWNujbuD5kb4=
+github.com/DeRuina/timberjack v1.3.1/go.mod h1:7GzI4TgL96tHcFlwWsf/jprQVlKf1/I+r/VMP6A+wbI=
 github.com/andybalholm/brotli v1.2.0 h1:ukwgCxwYrmACq68yiUqwIWnGY0cTPox/M94sVwToPjQ=
 github.com/andybalholm/brotli v1.2.0/go.mod h1:rzTDkvFWvIrjDXZHkuS16NPggd91W3kUSvPlQ1pLaKY=
 github.com/cloudflare/circl v1.6.1 h1:zqIqSPIndyBh1bjLVVDHMPpVKqp8Su/V+6MeDzzQBQ0=

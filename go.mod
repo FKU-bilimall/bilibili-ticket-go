@@ -14,6 +14,7 @@ require (
 )
 
 require (
+	github.com/DeRuina/timberjack v1.3.1 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/cloudflare/circl v1.6.1 // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
