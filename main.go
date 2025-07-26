@@ -3,6 +3,7 @@ package main
 import (
 	client "bilibili-ticket-go/bili"
 	"bilibili-ticket-go/global"
+	"bilibili-ticket-go/k"
 	"bilibili-ticket-go/models"
 	"bilibili-ticket-go/models/cookiejar"
 	"bilibili-ticket-go/models/hooks"
@@ -185,7 +186,7 @@ func main() {
 					}()
 
 				})
-				root.AddItem(btn, 3, 0, false)
+				root.AddItem(btn, 3, 0, true)
 			}
 			pages.AddPage("client", root, true, true)
 		}
@@ -216,8 +217,8 @@ func main() {
 	flex := tview.NewFlex().
 		AddItem(featureChoose, 25, 1, false).
 		AddItem(pageContainer, 0, 4, false)
-	//keyboard := NewKeyboardCaptureInstance(app, flex)
-	//app.SetInputCapture(keyboard.InputCapture)
+	keyboard := k.NewKeyboardCaptureInstance(app, flex)
+	app.SetInputCapture(keyboard.InputCapture)
 	go func() {
 		logger.Info("It's Bilibili-Ticket-Go!!!!!")
 		logger.Warn(fmt.Sprintf("This is a %s Bilibili Client for ticket booking.", color.New(color.FgHiRed).Sprint("FREE")))

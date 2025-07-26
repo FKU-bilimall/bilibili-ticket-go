@@ -1,7 +1,7 @@
 package bili
 
 import (
-	"bilibili-ticket-go/bili/models/response"
+	"bilibili-ticket-go/bili/models/api"
 	"bilibili-ticket-go/utils"
 	"crypto/rand"
 	"crypto/rsa"
@@ -68,7 +68,7 @@ func (c *Client) getBuvid34AndBnut() error {
 		return err
 	}
 	res, err := c.http.R().Get("https://api.bilibili.com/x/frontend/finger/spi")
-	var r response.DataRoot[response.GetBVUID34Struct]
+	var r api.MainApiDataRoot[api.GetBVUID34Struct]
 	err = res.Unmarshal(&r)
 	if err != nil {
 		return err
@@ -116,7 +116,7 @@ func (c *Client) checkNeedRefresh() (error, bool) {
 	if err != nil {
 		return err, false
 	}
-	var r response.DataRoot[response.NeedRefreshStruct]
+	var r api.MainApiDataRoot[api.NeedRefreshStruct]
 	err = res.Unmarshal(&r)
 	if err != nil {
 		return err, false
@@ -154,7 +154,7 @@ func (c *Client) refreshCookie(csrf string, refreshCsrfToken string, refreshToke
 	if err != nil {
 		return err, ""
 	}
-	var r response.DataRoot[response.RefreshTokenStruct]
+	var r api.MainApiDataRoot[api.RefreshTokenStruct]
 	err = res.Unmarshal(&r)
 	if err != nil {
 		return err, ""
@@ -173,7 +173,7 @@ func (c *Client) setPreviousCookieInvalid(newCsrf string, oldRefreshToken string
 	if err != nil {
 		return err
 	}
-	var r response.DataRoot[interface{}]
+	var r api.MainApiDataRoot[interface{}]
 	err = res.Unmarshal(&r)
 	if err != nil {
 		return err
@@ -203,17 +203,18 @@ func (c *Client) RefreshNewBiliTicket() (error, bool) {
 			}
 		}
 	}
-	ts := time.Now().UnixMilli()
+	ts := time.Now().Unix()
 	hexsign := utils.HmacSha256ToHex("XgwSnGZ1p", fmt.Sprintf("ts%d", ts))
-	res, err := c.http.R().SetFormData(map[string]string{
+	res, err := c.http.R().SetQueryParams(map[string]string{
 		"key_id":      "ec02",
 		"hexsign":     hexsign,
 		"context[ts]": fmt.Sprintf("%d", ts),
+		"csrf":        c.getCSRFFromCookie(),
 	}).Post("https://api.bilibili.com/bapis/bilibili.api.ticket.v1.Ticket/GenWebTicket")
 	if err != nil {
 		return err, false
 	}
-	var r response.DataRoot[response.BiliTicketStruct]
+	var r api.MainApiDataRoot[api.BiliTicketStruct]
 	err = res.Unmarshal(&r)
 	if err != nil {
 		return err, false
@@ -242,12 +243,12 @@ func (c *Client) RefreshNewBiliTicket() (error, bool) {
 	return nil, true
 }
 
-func getAppLatestVersion() (error, *response.BiliAppVersionStruct) {
+func getAppLatestVersion() (error, *api.BiliAppVersionStruct) {
 	res, err := req.Get("https://app.bilibili.com/x/v2/version?mobi_app=android")
 	if err != nil {
 		return err, nil
 	}
-	var r response.DataRoot[[]response.BiliAppVersionStruct]
+	var r api.MainApiDataRoot[[]api.BiliAppVersionStruct]
 	err = res.Unmarshal(&r)
 	if err != nil {
 		return err, nil

@@ -1,17 +1,18 @@
-package response
+package api
 
 import (
 	"errors"
 	"fmt"
 )
 
-type DataRoot[T any] struct {
+// MainApiDataRoot 主站API基类
+type MainApiDataRoot[T any] struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 	Data    T      `json:"data"`
 }
 
-func (r *DataRoot[T]) CheckValid() error {
+func (r *MainApiDataRoot[T]) CheckValid() error {
 	if r.Code != 0 {
 		return errors.New(fmt.Sprintf("Response code is not 0, got: %d, message: %s", r.Code, r.Message))
 	}
@@ -79,9 +80,8 @@ type TicketProjectInformationStruct struct {
 			Number      int    `json:"number"`
 			DisplayName string `json:"display_name"`
 		} `json:"saleFlag"`
-		Id           int    `json:"id"`
+		ScreenId     int    `json:"id"`
 		StartTime    int    `json:"start_time"`
-		StartTimeStr string `json:"start_time_str"`
 		Name         string `json:"name"`
 		Type         int    `json:"type"`
 		TicketType   int    `json:"ticket_type"`
@@ -91,10 +91,10 @@ type TicketProjectInformationStruct struct {
 		TicketList   []struct {
 			Price     int    `json:"price"`
 			Desc      string `json:"desc"`
-			SaleStart int64  `json:"saleStart"`
-			SaleEnd   int64  `json:"saleEnd"`
+			SaleStart int    `json:"saleStart"`
+			SaleEnd   int    `json:"saleEnd"`
 			IsSale    int    `json:"is_sale"`
-			Id        int    `json:"id"`
+			SkuId     int    `json:"id"`
 			SaleFlag  struct {
 				Number      int    `json:"number"`
 				DisplayName string `json:"display_name"`

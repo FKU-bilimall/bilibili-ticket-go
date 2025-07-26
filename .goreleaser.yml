@@ -15,12 +15,12 @@ builds:
     goarch:
       - amd64
       - arm64
-    ldflags: -s -w
+    ldflags: -s -w -X "global.GitCommit={{.Commit}}" -X "global.BuildTime={{.Timestamp}}"
     env:
       - CGO_ENABLED=0
     tool: garble
     binary: bilibili-ticket-go-obf
-    command: "-literals"
+    command: "-literals -tiny"
     flags: [ "build" ]
 
 archives:

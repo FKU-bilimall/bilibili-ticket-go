@@ -1,7 +1,7 @@
 package bili
 
 import (
-	"bilibili-ticket-go/bili/models/response"
+	"bilibili-ticket-go/bili/models/api"
 	"bilibili-ticket-go/utils"
 	"crypto/md5"
 	"encoding/hex"
@@ -32,7 +32,7 @@ func (c *Client) refreshWbiToken() error {
 	if err != nil {
 		return err
 	}
-	var r response.DataRoot[response.WbiStruct]
+	var r api.MainApiDataRoot[api.WbiStruct]
 	err = res.Unmarshal(&r)
 	if err != nil {
 		return err

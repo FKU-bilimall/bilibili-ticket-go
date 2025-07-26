@@ -1,4 +1,4 @@
-package main
+package k
 
 import (
 	"bilibili-ticket-go/global"
@@ -90,7 +90,7 @@ func (k *KeyboardCaptureInstance) InputCapture(event *tcell.EventKey) *tcell.Eve
 
 	if event.Key() == tcell.KeyEnter {
 		if k.selected.obj != nil && k.selected.obj != k.stack.Top().obj {
-			app.SetFocus(k.selected.obj)
+			k.app.SetFocus(k.selected.obj)
 			switch obj := k.selected.obj.(type) {
 			case *tview.Flex:
 				if k.selected.where == -1 {

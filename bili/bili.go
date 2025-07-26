@@ -1,7 +1,7 @@
 package bili
 
 import (
-	"bilibili-ticket-go/bili/models/response"
+	"bilibili-ticket-go/bili/models/api"
 	"bilibili-ticket-go/global"
 	"bilibili-ticket-go/utils"
 	"fmt"
@@ -18,7 +18,7 @@ type Client struct {
 	cookie       http.CookieJar
 	buvid        string
 	refreshToken string
-	appVersion   *response.BiliAppVersionStruct
+	appVersion   *api.BiliAppVersionStruct
 	buvidfp      string
 	webglfp      string
 	canvasfp     string
@@ -127,12 +127,12 @@ func GetNewClient(jar http.CookieJar, buvid string, refreshToken string, fingerp
 	return biliClient
 }
 
-func (c *Client) GetQRCodeUrlAndKey() (error, *response.GetQRLoginKeyStruct) {
+func (c *Client) GetQRCodeUrlAndKey() (error, *api.GetQRLoginKeyStruct) {
 	res, err := c.http.R().Get("https://passport.bilibili.com/x/passport-login/web/qrcode/generate?source=main-fe-header")
 	if err != nil {
 		return err, nil
 	}
-	var r response.DataRoot[response.GetQRLoginKeyStruct]
+	var r api.MainApiDataRoot[api.GetQRLoginKeyStruct]
 	err = res.Unmarshal(&r)
 	if err != nil {
 		return err, nil
@@ -155,36 +155,36 @@ func (c *Client) GetRefreshToken() string {
 	return c.refreshToken
 }
 
-func (c *Client) GetQRLoginState(qrcodeKey string) (error, *response.VerifyQRLoginStateStruct) {
+func (c *Client) GetQRLoginState(qrcodeKey string) (error, *api.VerifyQRLoginStateStruct) {
 	res, err := c.http.R().SetQueryParam("qrcode_key", qrcodeKey).Get("https://passport.bilibili.com/x/passport-login/web/qrcode/poll")
 	if err != nil {
 		return err, nil
 	}
-	var r response.DataRoot[response.VerifyQRLoginStateStruct]
+	var r api.MainApiDataRoot[api.VerifyQRLoginStateStruct]
 	err = res.Unmarshal(&r)
 	if err != nil {
 		return err, nil
 	}
-	c.refreshToken = r.Data.RefreshToken
-	if r.Code == 0 {
+	if r.Data.Code == 0 {
+		c.refreshToken = r.Data.RefreshToken
 		err := c.getBuvid34AndBnut()
 		if err != nil {
-			return err, nil
+			logger.Warnf("getBuvid34AndBnut() err: %v", err)
 		}
 		err, _ = c.RefreshNewBiliTicket()
 		if err != nil {
-			return err, nil
+			logger.Warnf("RefreshNewBiliTicket() err: %v", err)
 		}
 	}
 	return nil, &r.Data
 }
 
-func (c *Client) GetLoginStatus() (error, *response.GetLoginInfoStruct) {
+func (c *Client) GetLoginStatus() (error, *api.GetLoginInfoStruct) {
 	res, err := c.http.R().Get("https://api.bilibili.com/x/web-interface/nav")
 	if err != nil {
 		return err, nil
 	}
-	var r response.DataRoot[response.GetLoginInfoStruct]
+	var r api.MainApiDataRoot[api.GetLoginInfoStruct]
 	err = res.Unmarshal(&r)
 	if err != nil {
 		return err, nil

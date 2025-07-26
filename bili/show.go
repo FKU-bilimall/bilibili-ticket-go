@@ -1,24 +1,144 @@
 package bili
 
 import (
-	"bilibili-ticket-go/bili/models/response"
+	"bilibili-ticket-go/bili/models/api"
+	r "bilibili-ticket-go/bili/models/return"
+	"bilibili-ticket-go/bili/token"
+	"encoding/json"
 	"fmt"
+	"strconv"
+	"time"
 )
 
 const frontVersion = "134" // Stored on "https://s1.hdslb.com/bfs/static/platform/static/js/vendor.4052c4899bf31668a61b.js?277f136a95f6bbe03034" -> var version = "134";
 
-func (c *Client) GetTicketSkuIDByProjectID(projectID string) error {
+func (c *Client) GetTicketSkuIDsByProjectID(projectID string) (error, []r.TicketSkuScreenID, bool) {
 	res, err := c.http.R().Get(fmt.Sprintf("https://show.bilibili.com/api/ticket/project/getV2?version=%s&id=%s&project_id=%s&requestSource=pc-new", frontVersion, projectID, projectID))
 	if err != nil {
-		return err
+		return err, nil, false
 	}
-	var r response.DataRoot[response.TicketProjectInformationStruct]
-	err = res.Unmarshal(&r)
+	var data api.MainApiDataRoot[api.TicketProjectInformationStruct]
+	err = res.Unmarshal(&data)
 	if err != nil {
-		return err
+		return err, nil, false
 	}
-	if err = r.CheckValid(); err != nil {
-		return err
+	if err = data.CheckValid(); err != nil {
+		return err, nil, false
 	}
-	return nil
+	tickets := make([]r.TicketSkuScreenID, 0)
+	for _, s := range data.Data.ScreenList {
+		for _, t := range s.TicketList {
+			ticket := r.TicketSkuScreenID{
+				ScreenID: s.ScreenId,
+				SkuID:    t.SkuId,
+				Name:     t.ScreenName,
+				Desc:     t.Desc,
+				Price:    t.Price,
+				Flags: struct {
+					Number      int
+					DisplayName string
+				}{
+					Number:      t.SaleFlag.Number,
+					DisplayName: t.SaleFlag.DisplayName,
+				},
+				SaleStat: struct {
+					Start time.Time
+					End   time.Time
+				}{
+					Start: time.Unix(int64(t.SaleStart), 0),
+					End:   time.Unix(int64(t.SaleEnd), 0),
+				},
+			}
+			tickets = append(tickets, ticket)
+		}
+	}
+	return nil, tickets, data.Data.HotProject
+}
+
+func (c *Client) GetRequestTokenAndPToken(ct *token.CTokenGenerator, projectID string, ticket r.TicketSkuScreenID, isHotProject bool) (error, *r.RequestTokenAndPToken) {
+	form := map[string]string{
+		"project_id":    projectID,
+		"screen_id":     strconv.Itoa(ticket.ScreenID),
+		"order_type":    "1",
+		"count":         "1",
+		"sku_id":        strconv.Itoa(ticket.SkuID),
+		"token":         ct.GenerateCTokenPrepareStage(),
+		"requestSource": "pc-new",
+	}
+	if isHotProject {
+		form["newRisk"] = "true"
+	}
+	req, err := c.http.R().SetFormData(form).Post("https://show.bilibili.com/api/ticket/order/prepare?project_id=" + projectID)
+	if err != nil {
+		return err, nil
+	}
+	var data api.ShowApiDataRoot[api.RequestTokenAndPTokenStruct]
+	err = req.Unmarshal(&data)
+	if err != nil {
+		return err, nil
+	}
+	if err = data.CheckValid(); err != nil {
+		return err, nil
+	}
+	return nil, &r.RequestTokenAndPToken{
+		RequestToken: data.Data.Token,
+		PToken:       data.Data.Ptoken,
+		GaiaToken:    data.Data.GaData.GriskId,
+	}
+}
+
+func (c *Client) GetConfirmInformation(tokens *r.RequestTokenAndPToken, projectID string) (error, *api.ConfirmStruct) {
+	req, err := c.http.R().SetQueryParams(map[string]string{
+		"token":         tokens.RequestToken,
+		"ptoken":        tokens.PToken,
+		"project_id":    projectID,
+		"projectId":     projectID,
+		"requestSource": "pc-new",
+		"voucher":       "",
+	}).Get("https://show.bilibili.com/api/ticket/order/confirmInfo")
+	if err != nil {
+		return err, nil
+	}
+	var data api.ShowApiDataRoot[api.ConfirmStruct]
+	err = req.Unmarshal(&data)
+	if err != nil {
+		return err, nil
+	}
+	if err = data.CheckValid(); err != nil {
+		return err, nil
+	}
+	return nil, &data.Data
+}
+
+func (c *Client) SubmitOrder(ct *token.CTokenGenerator, whenGenPToken time.Time, tokens *r.RequestTokenAndPToken, projectID string, ticket r.TicketSkuScreenID, buyer *api.BuyerStruct, isHotProject bool) (error, int, *api.TicketOrderStruct) {
+	bs, err := json.Marshal([1]*api.BuyerStruct{buyer})
+	if err != nil {
+		return err, -1, nil
+	}
+	form := map[string]string{
+		"project_id":    projectID,
+		"screen_id":     strconv.Itoa(ticket.ScreenID),
+		"count":         "1",
+		"pay_money":     strconv.Itoa(ticket.Price),
+		"order_type":    "1",
+		"timestamp":     strconv.FormatInt(whenGenPToken.Unix(), 10),
+		"deviceId":      c.buvidfp,
+		"buyer_info":    string(bs),
+		"click_postion": fmt.Sprintf("{\"x\":948,\"y\":997,\"origin\":%d,\"now\":%d}", whenGenPToken, time.Now().Unix()),
+		"sku_id":        strconv.Itoa(ticket.SkuID),
+		"ctoken":        ct.GenerateCTokenCreateStage(whenGenPToken),
+		"ptoken":        tokens.PToken,
+		"token":         tokens.RequestToken,
+		"requestSource": "pc-new",
+	}
+	if isHotProject {
+		form["newRisk"] = "true"
+	}
+	req, err := c.http.R().SetFormData(form).Post("https://show.bilibili.com/api/ticket/order/createV2?project_id=" + projectID)
+	var data api.ShowApiDataRoot[api.TicketOrderStruct]
+	err = req.Unmarshal(&data)
+	if err != nil {
+		return err, -1, nil
+	}
+	return nil, data.ErrNumber, &data.Data
 }
