@@ -3,6 +3,7 @@ module bilibili-ticket-go
 go 1.24
 
 require (
+	github.com/DeRuina/timberjack v1.3.1
 	github.com/fatih/color v1.18.0
 	github.com/gdamore/tcell/v2 v2.8.1
 	github.com/imroc/req/v3 v3.54.0
@@ -14,12 +15,11 @@ require (
 )
 
 require (
-	github.com/DeRuina/timberjack v1.3.1 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/cloudflare/circl v1.6.1 // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/gdamore/encoding v1.0.1 // indirect
-	github.com/go-viper/mapstructure/v2 v2.2.1 // indirect
+	github.com/go-viper/mapstructure/v2 v2.3.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/icholy/digest v1.1.0 // indirect
