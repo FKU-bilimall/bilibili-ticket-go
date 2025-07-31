@@ -20,7 +20,7 @@ type KeyboardCaptureInstance struct {
 	selected selectItem
 }
 
-var klogger = utils.GetLogger(global.GetLogger(), "keyboard", nil)
+var logger = utils.GetLogger(global.GetLogger(), "keyboard", nil)
 
 func NewKeyboardCaptureInstance(app *tview.Application, root *tview.Flex) *KeyboardCaptureInstance {
 	app.SetFocus(root)
@@ -69,7 +69,7 @@ func (k *KeyboardCaptureInstance) InputCapture(event *tcell.EventKey) *tcell.Eve
 			return event
 		}
 		item := k.stack.Top()
-		klogger.Trace("Tab pressed, current item: ", item.obj, " at position: ", item.where)
+		logger.Trace("Tab pressed, current item: ", item.obj, " at position: ", item.where)
 
 		switch o := item.obj.(type) {
 		case *tview.Flex:

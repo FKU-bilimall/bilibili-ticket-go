@@ -7,13 +7,13 @@ import (
 )
 
 type Bilibili struct {
-	RefreshToken string                    `json:"refresh_token"`
-	Cookies      []cookiejar.CookieEntries `json:"cookies"`
-	BUVID        string                    `json:"BUVID"`
-	Fingerprint  string                    `json:"FP"`
+	RefreshToken string
+	Cookies      []cookiejar.CookieEntries
+	BUVID        string
+	Fingerprint  string
 }
 type Configuration struct {
-	Bilibili *Bilibili `json:"bilibili"`
+	Bilibili *Bilibili `mapstructure:"bilibili"`
 	viper    *viper.Viper
 }
 
@@ -24,8 +24,7 @@ func NewConfiguration() (*Configuration, error) {
 	v.AddConfigPath(".")
 	v.SetDefault("bilibili",
 		&Bilibili{
-			RefreshToken: "",
-			Cookies:      make([]cookiejar.CookieEntries, 0),
+			Cookies: make([]cookiejar.CookieEntries, 0),
 		},
 	)
 	err := v.SafeWriteConfig()

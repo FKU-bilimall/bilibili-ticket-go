@@ -27,7 +27,7 @@ type Client struct {
 
 var logger = utils.GetLogger(global.GetLogger(), "bili-client", nil)
 
-func GetNewClient(jar http.CookieJar, buvid string, refreshToken string, fingerprint string) *Client {
+func GetNewClient(jar http.CookieJar, buvid string, rt string, fingerprint string) *Client {
 	var id = buvid
 	if id == "" {
 		id = utils.GenerateXUBUVID()
@@ -47,8 +47,8 @@ func GetNewClient(jar http.CookieJar, buvid string, refreshToken string, fingerp
 		buvid:        id,
 		cookie:       jar,
 		appVersion:   ver,
-		refreshToken: refreshToken,
-		buvidfp:      fingerprint,
+		refreshToken: rt,
+		buvidfp:      fp,
 		webglfp:      utils.RandomString("0123456789abcdef", 32),
 		canvasfp:     utils.RandomString("0123456789abcdef", 32),
 		wbi:          &wbiKey{},

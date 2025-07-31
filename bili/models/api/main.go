@@ -72,8 +72,8 @@ type WbiStruct struct {
 type TicketProjectInformationStruct struct {
 	Id         int    `json:"id"`
 	Name       string `json:"name"`
-	SaleBegin  int    `json:"sale_begin"`
-	SaleEnd    int    `json:"sale_end"`
+	SaleBegin  int64  `json:"sale_begin"`
+	SaleEnd    int64  `json:"sale_end"`
 	HotProject bool   `json:"hotProject"`
 	ScreenList []struct {
 		SaleFlag struct {
@@ -91,8 +91,8 @@ type TicketProjectInformationStruct struct {
 		TicketList   []struct {
 			Price     int    `json:"price"`
 			Desc      string `json:"desc"`
-			SaleStart int    `json:"saleStart"`
-			SaleEnd   int    `json:"saleEnd"`
+			SaleStart int64  `json:"saleStart"`
+			SaleEnd   int64  `json:"saleEnd"`
 			IsSale    int    `json:"is_sale"`
 			SkuId     int    `json:"id"`
 			SaleFlag  struct {

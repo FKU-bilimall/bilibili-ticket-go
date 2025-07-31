@@ -2,6 +2,7 @@ package main
 
 import (
 	client "bilibili-ticket-go/bili"
+	"bilibili-ticket-go/bili/clock"
 	"bilibili-ticket-go/global"
 	"bilibili-ticket-go/k"
 	"bilibili-ticket-go/models"
@@ -32,7 +33,7 @@ var fileLogger = &timberjack.Logger{
 	MaxBackups:       3,                     // backups
 	MaxAge:           7,                     // days
 	Compress:         true,                  // default: false
-	LocalTime:        false,                 // default: false (use UTC)
+	LocalTime:        true,                  // default: false (use UTC)
 	RotationInterval: time.Hour * 24,        // Rotate daily if no other rotation met
 	BackupTimeFormat: "2006-01-02-15-04-05", // Rotated files will have format <logfilename>-2006-01-02-15-04-05-<rotationCriterion>-timberjack.log
 }
@@ -65,13 +66,19 @@ func init() {
 }
 
 func main() {
+	bc, _ := clock.GetBilibiliClockOffset()
+	ac, _ := clock.GetAliyunClockOffset()
+	logger.Info("bc: ", bc, " ac: ", ac)
 	defer fileLogger.Close()
 	defer func() {
 		var ck = jar.AllPersistentEntries()
 		if ck != nil {
 			conf.Bilibili.Cookies = ck
 		}
-		conf.Bilibili.RefreshToken = biliClient.GetRefreshToken()
+		t := biliClient.GetRefreshToken()
+		if t != "" {
+			conf.Bilibili.RefreshToken = t
+		}
 		conf.Save()
 	}()
 	app = tview.NewApplication().EnableMouse(true).EnablePaste(true)
