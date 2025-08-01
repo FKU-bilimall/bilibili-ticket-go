@@ -4,14 +4,16 @@ import (
 	client "bilibili-ticket-go/bili"
 	"bilibili-ticket-go/bili/clock"
 	"bilibili-ticket-go/global"
-	"bilibili-ticket-go/k"
+	"bilibili-ticket-go/keyboard"
 	"bilibili-ticket-go/models"
 	"bilibili-ticket-go/models/cookiejar"
 	"bilibili-ticket-go/models/hooks"
+	"bilibili-ticket-go/tui"
 	"bilibili-ticket-go/utils"
 	"fmt"
 	"github.com/DeRuina/timberjack"
 	"github.com/fatih/color"
+	"github.com/gdamore/tcell/v2"
 	"github.com/imroc/req/v3"
 	"github.com/rivo/tview"
 	"github.com/sirupsen/logrus"
@@ -25,17 +27,16 @@ var biliClient *client.Client = nil
 var conf *models.Configuration = nil
 var jar *cookiejar.Jar = nil
 var app *tview.Application = nil
-var pageContainer *tview.Flex = nil
 var loggerTextview *tview.TextView = nil
 var fileLogger = &timberjack.Logger{
-	Filename:         "logs/latest.log",     // Choose an appropriate path
-	MaxSize:          100,                   // megabytes
-	MaxBackups:       3,                     // backups
-	MaxAge:           7,                     // days
-	Compress:         true,                  // default: false
-	LocalTime:        true,                  // default: false (use UTC)
-	RotationInterval: time.Hour * 24,        // Rotate daily if no other rotation met
-	BackupTimeFormat: "2006-01-02-15-04-05", // Rotated files will have format <logfilename>-2006-01-02-15-04-05-<rotationCriterion>-timberjack.log
+	Filename:         "logs/latest.log", // Choose an appropriate path
+	MaxSize:          100,               // megabytes
+	MaxBackups:       10,                // backups
+	MaxAge:           7,                 // days
+	Compress:         false,             // default: false
+	LocalTime:        true,              // default: false (use UTC)
+	RotationInterval: time.Hour * 24,    // Rotate daily if no other rotation met
+	BackupTimeFormat: "20060102-150405", // Rotated files will have format <logfilename>-2006-01-02-15-04-05-<rotationCriterion>-timberjack.log
 }
 
 func init() {
@@ -66,6 +67,7 @@ func init() {
 }
 
 func main() {
+	fileLogger.Rotate()
 	bc, _ := clock.GetBilibiliClockOffset()
 	ac, _ := clock.GetAliyunClockOffset()
 	logger.Info("bc: ", bc, " ac: ", ac)
@@ -82,9 +84,8 @@ func main() {
 		conf.Save()
 	}()
 	app = tview.NewApplication().EnableMouse(true).EnablePaste(true)
-	pageContainer = tview.NewFlex()
-	pageContainer.SetBorder(true).SetTitle("BILIBILI CLIENT")
-	pages := tview.NewPages()
+	pages := tui.NewPages()
+	pages.SetBorder(true).SetTitle("BILIBILI CLIENT")
 	{
 		{
 			loggerTextview.ScrollToEnd()
@@ -138,6 +139,7 @@ func main() {
 					root.AddItem(eta, 1, 0, false)
 					go func() {
 						timer := time.NewTimer(1 * time.Second)
+						b := false
 					FOR:
 						for {
 							select {
@@ -171,6 +173,7 @@ func main() {
 									if stat.Login {
 										t.Clear()
 										t.Write([]byte(fmt.Sprintf("Welcome %s, Your UID is %d", stat.Name, stat.UID)))
+										b = true
 									} else {
 										root.AddItem(btn, 3, 0, false)
 									}
@@ -182,6 +185,9 @@ func main() {
 								}
 								timer.Reset(1*time.Second - offest)
 							}
+						}
+						if b {
+							return
 						}
 						root.RemoveItem(eta)
 						root.RemoveItem(qrv)
@@ -198,9 +204,12 @@ func main() {
 			pages.AddPage("client", root, true, true)
 		}
 		{
+			root := tview.NewFlex().SetDirection(tview.FlexRow)
+			root.AddItem(tview.NewInputField(), 1, 0, false)
+			root.AddItem(tview.NewButton("AAA").SetStyle(tcell.StyleDefault.Background(tcell.ColorYellow)), 5, 0, false)
+			pages.AddPage("ticket", root, true, false)
 		}
 	}
-	pageContainer.AddItem(pages, 0, 1, false)
 	featureChoose := tview.NewFlex().SetDirection(tview.FlexRow)
 	{
 		featureChoose.SetBorder(true).SetTitle("Features")
@@ -210,12 +219,14 @@ func main() {
 			list.AddItem("Logs", "Latest Logs", 'o', func() {})
 			list.AddItem("Ticket", "Ticket Booking", 't', func() {})
 			list.SetSelectedFunc(func(i int, mt string, _ string, _ rune) {
-				pageContainer.SetTitle(strings.ToUpper(mt))
+				pages.SetTitle(strings.ToUpper(mt))
 				switch i {
 				case 0:
 					pages.SwitchToPage("client")
 				case 1:
 					pages.SwitchToPage("logs")
+				case 2:
+					pages.SwitchToPage("ticket")
 				}
 			})
 			featureChoose.AddItem(list, 0, 1, true)
@@ -223,9 +234,9 @@ func main() {
 	}
 	flex := tview.NewFlex().
 		AddItem(featureChoose, 25, 1, false).
-		AddItem(pageContainer, 0, 4, false)
-	keyboard := k.NewKeyboardCaptureInstance(app, flex)
-	app.SetInputCapture(keyboard.InputCapture)
+		AddItem(pages, 0, 4, false)
+	k := keyboard.NewKeyboardCaptureInstance(app, flex)
+	app.SetInputCapture(k.InputCapture)
 	go func() {
 		logger.Info("It's Bilibili-Ticket-Go!!!!!")
 		logger.Warn(fmt.Sprintf("This is a %s Bilibili Client for ticket booking.", color.New(color.FgHiRed).Sprint("FREE")))

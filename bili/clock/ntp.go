@@ -8,10 +8,11 @@ import (
 )
 
 func GetBilibiliClockOffset() (time.Duration, error) {
-	res, err := req.R().Get("https://api.live.bilibili.com/xlive/open-interface/v1/rtc/getTimestamp")
+	res, err := req.R().EnableTrace().Get("https://api.live.bilibili.com/xlive/open-interface/v1/rtc/getTimestamp")
 	if err != nil {
 		return 0, err
 	}
+	now := time.Now()
 	var r api.MainApiDataRoot[api.RTCTimestamp]
 	err = res.Unmarshal(&r)
 	if err != nil {
@@ -19,7 +20,7 @@ func GetBilibiliClockOffset() (time.Duration, error) {
 	}
 	t := res.TraceInfo()
 	NO := t.FirstResponseTime + t.ResponseTime
-	return time.UnixMilli(r.Data.Microtime).Add(NO).Sub(time.Now()), nil // Placeholder value, replace with actual logic to get time offset
+	return time.UnixMilli(r.Data.Microtime).Add(NO).Sub(now), nil
 }
 
 func GetAliyunClockOffset() (time.Duration, error) {

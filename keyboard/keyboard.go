@@ -1,16 +1,18 @@
-package k
+package keyboard
 
 import (
 	"bilibili-ticket-go/global"
 	"bilibili-ticket-go/models"
+	"bilibili-ticket-go/tui"
 	"bilibili-ticket-go/utils"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
 type selectItem struct {
-	where int
-	obj   tview.Primitive
+	where         int
+	obj           tview.Primitive
+	previousColor tcell.Color
 }
 
 type KeyboardCaptureInstance struct {
@@ -22,12 +24,15 @@ type KeyboardCaptureInstance struct {
 
 var logger = utils.GetLogger(global.GetLogger(), "keyboard", nil)
 
+const highlightColor = tcell.ColorForestGreen
+
 func NewKeyboardCaptureInstance(app *tview.Application, root *tview.Flex) *KeyboardCaptureInstance {
 	app.SetFocus(root)
 	st := (&models.Stack[selectItem]{}).New()
 	st.Push(selectItem{
-		where: -1,
-		obj:   root,
+		where:         -1,
+		obj:           root,
+		previousColor: tcell.ColorDefault,
 	})
 	return &KeyboardCaptureInstance{
 		stack:    st,
@@ -36,6 +41,7 @@ func NewKeyboardCaptureInstance(app *tview.Application, root *tview.Flex) *Keybo
 		selected: selectItem{where: -1, obj: root},
 	}
 }
+
 func (k *KeyboardCaptureInstance) Reset() {
 	k.stack.Clear()
 	k.stack.Push(selectItem{
@@ -47,11 +53,19 @@ func (k *KeyboardCaptureInstance) Reset() {
 
 func (k *KeyboardCaptureInstance) InputCapture(event *tcell.EventKey) *tcell.EventKey {
 	if event.Key() == tcell.KeyEscape {
+		if k.selected.obj != k.root && k.selected.obj != nil {
+			current := k.stack.Top()
+			k.app.SetFocus(current.obj)
+			setColor(k.selected.obj, k.selected.previousColor)
+			k.selected.obj = nil
+			return event
+		}
 		if k.stack.Size() > 1 {
 			current := k.stack.Top()
 			k.stack.Pop()
 			previous := k.stack.Top()
-			switchHighlighted(k.selected.obj, current.obj)
+			setColor(previous.obj, current.previousColor)
+			setColor(current.obj, highlightColor)
 			k.selected = current
 			k.app.SetFocus(previous.obj)
 		} else if k.stack.Size() == 1 {
@@ -71,33 +85,26 @@ func (k *KeyboardCaptureInstance) InputCapture(event *tcell.EventKey) *tcell.Eve
 		item := k.stack.Top()
 		logger.Trace("Tab pressed, current item: ", item.obj, " at position: ", item.where)
 
-		switch o := item.obj.(type) {
-		case *tview.Flex:
-			var nextItemID = k.selected.where + 1
-			if nextItemID >= o.GetItemCount() {
-				nextItemID = 0
-			}
-			nxtObj := o.GetItem(nextItemID)
-			switchHighlighted(k.selected.obj, nxtObj)
-			k.selected = selectItem{
-				where: nextItemID,
-				obj:   nxtObj,
-			}
-		case *tview.Pages:
-
-		}
+		k.switchToNextItem(item)
 	}
 
 	if event.Key() == tcell.KeyEnter {
 		if k.selected.obj != nil && k.selected.obj != k.stack.Top().obj {
 			k.app.SetFocus(k.selected.obj)
-			switch obj := k.selected.obj.(type) {
+			switch o := k.selected.obj.(type) {
 			case *tview.Flex:
 				if k.selected.where == -1 {
 					break
 				}
 				k.stack.Push(k.selected)
-				switchHighlighted(nil, obj)
+				setColor(o, highlightColor)
+				k.selected = selectItem{
+					where: -1,
+					obj:   nil,
+				}
+			case *tui.Pages:
+				k.stack.Push(k.selected)
+				setColor(o, highlightColor)
 				k.selected = selectItem{
 					where: -1,
 					obj:   nil,
@@ -108,31 +115,62 @@ func (k *KeyboardCaptureInstance) InputCapture(event *tcell.EventKey) *tcell.Eve
 	return event
 }
 
-func switchHighlighted(oldObj tview.Primitive, newObj tview.Primitive) {
-	colorSwitch(oldObj, tcell.ColorWhite)
-	colorSwitch(newObj, tcell.ColorForestGreen)
+func (k *KeyboardCaptureInstance) switchToNextItem(box selectItem) {
+	switch o := box.obj.(type) {
+	case *tview.Flex:
+		var nextItemID = k.selected.where + 1
+		if nextItemID >= o.GetItemCount() {
+			nextItemID = 0
+		}
+		nxtObj := o.GetItem(nextItemID)
+
+		setColor(k.selected.obj, k.selected.previousColor)
+
+		c := setColor(nxtObj, highlightColor)
+
+		k.selected = selectItem{
+			where:         nextItemID,
+			obj:           nxtObj,
+			previousColor: c,
+		}
+
+	case *tui.Pages:
+		cur := o.GetCurrentPage()
+		k.switchToNextItem(selectItem{
+			where: -1,
+			obj:   cur,
+		})
+	}
 }
 
-func colorSwitch(primitive tview.Primitive, color tcell.Color) {
-	switch old := primitive.(type) {
+func setColor(primitive tview.Primitive, color tcell.Color) tcell.Color {
+	var c tcell.Color
+	switch obj := primitive.(type) {
 	case *tview.List:
-		old.SetBorderColor(color)
+		c = obj.GetBorderColor()
+		obj.SetBorderColor(color)
 	case *tview.Box:
-		old.SetBorderColor(color)
+		c = obj.GetBorderColor()
+		obj.SetBorderColor(color)
 	case *tview.Flex:
-		old.SetBorderColor(color)
+		c = obj.GetBorderColor()
+		obj.SetBorderColor(color)
 	case *tview.Grid:
-		old.SetBorderColor(color)
+		c = obj.GetBorderColor()
+		obj.SetBorderColor(color)
 	case *tview.Button:
-		old.SetStyle(tcell.StyleDefault.Background(color))
-	case *tview.Pages:
-		old.SetBorderColor(color)
+		c = obj.GetBackgroundColor()
+		obj.SetStyle(tcell.StyleDefault.Background(color))
+	case *tui.Pages:
+		c = obj.GetBorderColor()
+		obj.SetBorderColor(color)
 	}
+	return c
 }
 
 func allowDeepFocus(obj tview.Primitive) bool {
 	switch obj.(type) {
-	case *tview.Grid, *tview.Flex, *tview.Pages:
+	case *tview.Grid, *tview.Flex, *tui.Pages:
 		return true
 	default:
 		return false
