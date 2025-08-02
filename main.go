@@ -15,6 +15,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/gdamore/tcell/v2"
 	"github.com/imroc/req/v3"
+	"github.com/navidys/tvxwidgets"
 	"github.com/rivo/tview"
 	"github.com/sirupsen/logrus"
 	"strconv"
@@ -214,12 +215,13 @@ func main() {
 				SetLabel("Project ID: ").
 				SetFieldWidth(20).
 				SetPlaceholder("Enter Project ID")
+
 			input.SetDoneFunc(func(key tcell.Key) {
 				logger.Info("Project ID: ", input.GetText())
-				_, i, b := biliClient.GetTicketSkuIDsByProjectID(input.GetText())
-				logger.Info("GetTicketSkuIDsByProjectID: ", i, b)
+				//err, i, b := biliClient.GetTicketSkuIDsByProjectID(input.GetText())
 			})
 			root.AddItem(input, 1, 0, false)
+			root.AddItem(tvxwidgets.NewSpinner().SetStyle(tvxwidgets.SpinnerDotsCircling), 1, 0, false)
 			pages.AddPage("ticket", root, true, false)
 		}
 	}

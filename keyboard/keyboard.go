@@ -138,11 +138,23 @@ func (k *KeyboardCaptureInstance) switchToNextItem(box selectItem) {
 	switch o := box.obj.(type) {
 	case *tview.Flex:
 		var nextItemID = k.selected.where + 1
-		if nextItemID >= o.GetItemCount() {
-			nextItemID = 0
+		var cnt = o.GetItemCount()
+		var nxtObj tview.Primitive
+		for i := 0; i < cnt; i++ {
+			var index = nextItemID + i
+			if index >= cnt {
+				index -= cnt
+			}
+			obj := o.GetItem(index)
+			if selectable(obj) {
+				nxtObj = obj
+				nextItemID = index
+				break
+			}
 		}
-		nxtObj := o.GetItem(nextItemID)
-
+		if nxtObj == nil {
+			return
+		}
 		setColor(k.selected.obj, k.selected.previousColor)
 		c := setColor(nxtObj, highlightColor)
 
@@ -151,7 +163,6 @@ func (k *KeyboardCaptureInstance) switchToNextItem(box selectItem) {
 			obj:           nxtObj,
 			previousColor: c,
 		}
-
 	case *tui.Pages:
 		cur := o.GetCurrentPage()
 		k.switchToNextItem(selectItem{
@@ -161,6 +172,14 @@ func (k *KeyboardCaptureInstance) switchToNextItem(box selectItem) {
 	}
 }
 
+func selectable(obj tview.Primitive) bool {
+	switch obj.(type) {
+	case *tview.List, *tview.Box, *tview.Flex, *tview.Grid, *tview.Button, *tui.Pages, *tview.InputField:
+		return true
+	default:
+		return false
+	}
+}
 func setColor(primitive tview.Primitive, color tcell.Color) tcell.Color {
 	var c tcell.Color
 	switch obj := primitive.(type) {

@@ -4,10 +4,10 @@ go 1.24
 
 require (
 	github.com/DeRuina/timberjack v1.3.3
+	github.com/beevik/ntp v1.4.3
 	github.com/fatih/color v1.18.0
 	github.com/gdamore/tcell/v2 v2.8.1
 	github.com/imroc/req/v3 v3.54.0
-	github.com/beevik/ntp v1.4.3
 	github.com/rivo/tview v0.0.0-20250625164341-a4a78f1e05cb
 	github.com/sirupsen/logrus v1.9.3
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
@@ -28,6 +28,7 @@ require (
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
+	github.com/navidys/tvxwidgets v0.11.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/quic-go/qpack v0.5.1 // indirect
 	github.com/quic-go/quic-go v0.54.0 // indirect
