@@ -17,7 +17,7 @@ import (
 	"github.com/imroc/req/v3"
 	"github.com/rivo/tview"
 	"github.com/sirupsen/logrus"
-	"log"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -29,18 +29,19 @@ var jar *cookiejar.Jar = nil
 var app *tview.Application = nil
 var loggerTextview *tview.TextView = nil
 var fileLogger = &timberjack.Logger{
-	Filename:         "logs/latest.log", // Choose an appropriate path
-	MaxSize:          100,               // megabytes
-	MaxBackups:       10,                // backups
-	MaxAge:           7,                 // days
-	Compress:         false,             // default: false
-	LocalTime:        true,              // default: false (use UTC)
-	RotationInterval: time.Hour * 24,    // Rotate daily if no other rotation met
+	Filename:   "logs/latest.log", // Choose an appropriate path
+	MaxSize:    100,               // megabytes
+	MaxBackups: 10,                // backups
+	MaxAge:     7,                 // days
+	Compress:   false,             // default: false
+	LocalTime:  true,              // default: false (use UTC)
+	//RotationInterval: time.Hour * 24,    // Rotate daily if no other rotation met
 	BackupTimeFormat: "20060102-150405", // Rotated files will have format <logfilename>-2006-01-02-15-04-05-<rotationCriterion>-timberjack.log
 }
 
 func init() {
 	global.GetLogger().AddHook(hooks.NewLogFileRotateHook(fileLogger))
+	fileLogger.Rotate()
 	loggerTextview = tview.NewTextView()
 	loggerTextview.SetDynamicColors(true).
 		SetScrollable(true).
@@ -67,10 +68,10 @@ func init() {
 }
 
 func main() {
-	fileLogger.Rotate()
 	bc, _ := clock.GetBilibiliClockOffset()
 	ac, _ := clock.GetAliyunClockOffset()
-	logger.Info("bc: ", bc, " ac: ", ac)
+	logger.Trace("The Offest Between You and Bilibili Server: ", bc)
+	logger.Trace("The Offest Between You and Aliyun NTP Server: ", ac)
 	defer fileLogger.Close()
 	defer func() {
 		var ck = jar.AllPersistentEntries()
@@ -199,14 +200,26 @@ func main() {
 					}()
 
 				})
-				root.AddItem(btn, 3, 0, true)
+				root.AddItem(btn, 3, 0, false)
 			}
 			pages.AddPage("client", root, true, true)
 		}
 		{
 			root := tview.NewFlex().SetDirection(tview.FlexRow)
-			root.AddItem(tview.NewInputField(), 1, 0, false)
-			root.AddItem(tview.NewButton("AAA").SetStyle(tcell.StyleDefault.Background(tcell.ColorYellow)), 5, 0, false)
+			input := tview.NewInputField().
+				SetAcceptanceFunc(func(text string, ch rune) bool {
+					_, err := strconv.Atoi(text)
+					return err == nil
+				}).
+				SetLabel("Project ID: ").
+				SetFieldWidth(20).
+				SetPlaceholder("Enter Project ID")
+			input.SetDoneFunc(func(key tcell.Key) {
+				logger.Info("Project ID: ", input.GetText())
+				_, i, b := biliClient.GetTicketSkuIDsByProjectID(input.GetText())
+				logger.Info("GetTicketSkuIDsByProjectID: ", i, b)
+			})
+			root.AddItem(input, 1, 0, false)
 			pages.AddPage("ticket", root, true, false)
 		}
 	}
@@ -237,6 +250,12 @@ func main() {
 		AddItem(pages, 0, 4, false)
 	k := keyboard.NewKeyboardCaptureInstance(app, flex)
 	app.SetInputCapture(k.InputCapture)
+	app.SetMouseCapture(func(event *tcell.EventMouse, action tview.MouseAction) (*tcell.EventMouse, tview.MouseAction) {
+		if k.Selected() && (action == tview.MouseRightClick || action == tview.MouseMiddleClick || action == tview.MouseLeftClick) {
+			k.Reset()
+		}
+		return event, action
+	})
 	go func() {
 		logger.Info("It's Bilibili-Ticket-Go!!!!!")
 		logger.Warn(fmt.Sprintf("This is a %s Bilibili Client for ticket booking.", color.New(color.FgHiRed).Sprint("FREE")))
@@ -257,6 +276,6 @@ func main() {
 		}
 	}()
 	if err := app.SetRoot(flex, true).Run(); err != nil {
-		log.Fatal(err)
+		logger.Fatal(err)
 	}
 }

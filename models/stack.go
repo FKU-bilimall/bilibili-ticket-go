@@ -43,7 +43,7 @@ func (s *Stack[T]) Clear() {
 		}
 	}
 	s.mutex.Lock()
-	s.data = make([]T, 0)
+	s.data = make([]T, 1)
 	s.top = 0
 	s.cap = 1
 	s.mutex.Unlock()

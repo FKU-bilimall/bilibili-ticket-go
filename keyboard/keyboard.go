@@ -42,29 +42,49 @@ func NewKeyboardCaptureInstance(app *tview.Application, root *tview.Flex) *Keybo
 	}
 }
 
+func (k *KeyboardCaptureInstance) Selected() bool {
+	return k.selected.obj != nil && k.selected.obj != k.root
+}
+
 func (k *KeyboardCaptureInstance) Reset() {
+	// 恢复当前选中项的颜色（如果有）
+	if k.selected.obj != nil {
+		setColor(k.selected.obj, k.selected.previousColor)
+	}
+	var size = int(k.stack.Size() + 1)
+	for i := 1; i < size; i++ {
+		current := k.stack.Top()
+		k.stack.Pop()
+		// 恢复 current 的颜色
+		setColor(current.obj, current.previousColor)
+	}
 	k.stack.Clear()
 	k.stack.Push(selectItem{
-		where: 0,
-		obj:   k.root,
+		where:         -1,
+		obj:           k.root,
+		previousColor: tcell.ColorDefault,
 	})
+	k.selected = selectItem{where: -1, obj: k.root}
 	k.app.SetFocus(k.root)
 }
 
 func (k *KeyboardCaptureInstance) InputCapture(event *tcell.EventKey) *tcell.EventKey {
 	if event.Key() == tcell.KeyEscape {
-		if k.selected.obj != k.root && k.selected.obj != nil {
+		if k.selected.obj != k.root && k.selected.obj != nil && k.app.GetFocus() == k.selected.obj {
 			current := k.stack.Top()
 			k.app.SetFocus(current.obj)
+			// 恢复当前选中项的颜色
 			setColor(k.selected.obj, k.selected.previousColor)
-			k.selected.obj = nil
 			return event
 		}
 		if k.stack.Size() > 1 {
 			current := k.stack.Top()
 			k.stack.Pop()
 			previous := k.stack.Top()
-			setColor(previous.obj, current.previousColor)
+			// 恢复当前选中项的颜色
+			setColor(k.selected.obj, k.selected.previousColor)
+			// 恢复 previous 的颜色
+			setColor(previous.obj, previous.previousColor)
 			setColor(current.obj, highlightColor)
 			k.selected = current
 			k.app.SetFocus(previous.obj)
@@ -83,32 +103,31 @@ func (k *KeyboardCaptureInstance) InputCapture(event *tcell.EventKey) *tcell.Eve
 			return event
 		}
 		item := k.stack.Top()
-		logger.Trace("Tab pressed, current item: ", item.obj, " at position: ", item.where)
-
 		k.switchToNextItem(item)
 	}
 
 	if event.Key() == tcell.KeyEnter {
 		if k.selected.obj != nil && k.selected.obj != k.stack.Top().obj {
 			k.app.SetFocus(k.selected.obj)
-			switch o := k.selected.obj.(type) {
+
+			switch k.selected.obj.(type) {
 			case *tview.Flex:
 				if k.selected.where == -1 {
 					break
 				}
 				k.stack.Push(k.selected)
-				setColor(o, highlightColor)
 				k.selected = selectItem{
 					where: -1,
 					obj:   nil,
 				}
+				return nil
 			case *tui.Pages:
 				k.stack.Push(k.selected)
-				setColor(o, highlightColor)
 				k.selected = selectItem{
 					where: -1,
 					obj:   nil,
 				}
+				return nil
 			}
 		}
 	}
@@ -125,7 +144,6 @@ func (k *KeyboardCaptureInstance) switchToNextItem(box selectItem) {
 		nxtObj := o.GetItem(nextItemID)
 
 		setColor(k.selected.obj, k.selected.previousColor)
-
 		c := setColor(nxtObj, highlightColor)
 
 		k.selected = selectItem{
@@ -164,6 +182,10 @@ func setColor(primitive tview.Primitive, color tcell.Color) tcell.Color {
 	case *tui.Pages:
 		c = obj.GetBorderColor()
 		obj.SetBorderColor(color)
+	case *tview.InputField:
+		_, c, _ = obj.GetFieldStyle().Decompose()
+		obj.SetFieldBackgroundColor(color)
+		obj.SetPlaceholderStyle(obj.GetFieldStyle().Background(color))
 	}
 	return c
 }
