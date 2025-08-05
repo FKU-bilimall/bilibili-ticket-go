@@ -5,6 +5,8 @@ import (
 	"bilibili-ticket-go/models"
 	"bilibili-ticket-go/tui"
 	"bilibili-ticket-go/utils"
+	"reflect"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -18,7 +20,7 @@ type selectItem struct {
 type KeyboardCaptureInstance struct {
 	stack    *models.Stack[selectItem]
 	app      *tview.Application
-	root     *tview.Flex
+	root     tview.Primitive
 	selected selectItem
 }
 
@@ -26,7 +28,7 @@ var logger = utils.GetLogger(global.GetLogger(), "keyboard", nil)
 
 const highlightColor = tcell.ColorForestGreen
 
-func NewKeyboardCaptureInstance(app *tview.Application, root *tview.Flex) *KeyboardCaptureInstance {
+func NewKeyboardCaptureInstance(app *tview.Application, root tview.Primitive) *KeyboardCaptureInstance {
 	app.SetFocus(root)
 	st := (&models.Stack[selectItem]{}).New()
 	st.Push(selectItem{
@@ -43,7 +45,7 @@ func NewKeyboardCaptureInstance(app *tview.Application, root *tview.Flex) *Keybo
 }
 
 func (k *KeyboardCaptureInstance) Selected() bool {
-	return k.selected.obj != nil && k.selected.obj != k.root
+	return k.selected.obj != nil && k.selected.obj != k.root || k.stack.Size() > 1
 }
 
 func (k *KeyboardCaptureInstance) Reset() {
@@ -74,6 +76,13 @@ func (k *KeyboardCaptureInstance) InputCapture(event *tcell.EventKey) *tcell.Eve
 			current := k.stack.Top()
 			k.app.SetFocus(current.obj)
 			// 恢复当前选中项的颜色
+			//setColor(k.selected.obj, k.selected.previousColor)
+			return event
+		}
+		if k.selected.obj != k.root && k.selected.obj != nil && k.app.GetFocus() == k.selected.obj {
+			current := k.stack.Top()
+			k.app.SetFocus(current.obj)
+			// 恢复当前选中项的颜色
 			setColor(k.selected.obj, k.selected.previousColor)
 			return event
 		}
@@ -84,7 +93,7 @@ func (k *KeyboardCaptureInstance) InputCapture(event *tcell.EventKey) *tcell.Eve
 			// 恢复当前选中项的颜色
 			setColor(k.selected.obj, k.selected.previousColor)
 			// 恢复 previous 的颜色
-			setColor(previous.obj, previous.previousColor)
+			//setColor(previous.obj, previous.previousColor)
 			setColor(current.obj, highlightColor)
 			k.selected = current
 			k.app.SetFocus(previous.obj)
@@ -109,7 +118,6 @@ func (k *KeyboardCaptureInstance) InputCapture(event *tcell.EventKey) *tcell.Eve
 	if event.Key() == tcell.KeyEnter {
 		if k.selected.obj != nil && k.selected.obj != k.stack.Top().obj {
 			k.app.SetFocus(k.selected.obj)
-
 			switch k.selected.obj.(type) {
 			case *tview.Flex:
 				if k.selected.where == -1 {
@@ -135,41 +143,59 @@ func (k *KeyboardCaptureInstance) InputCapture(event *tcell.EventKey) *tcell.Eve
 }
 
 func (k *KeyboardCaptureInstance) switchToNextItem(box selectItem) {
-	switch o := box.obj.(type) {
-	case *tview.Flex:
-		var nextItemID = k.selected.where + 1
-		var cnt = o.GetItemCount()
-		var nxtObj tview.Primitive
-		for i := 0; i < cnt; i++ {
-			var index = nextItemID + i
-			if index >= cnt {
-				index -= cnt
-			}
-			obj := o.GetItem(index)
-			if selectable(obj) {
-				nxtObj = obj
-				nextItemID = index
-				break
-			}
+	// 收集所有可选项（递归扁平化）
+	items := flattenItems(box.obj)
+	if len(items) == 0 {
+		return
+	}
+	// 找到当前选中项在扁平化列表中的索引
+	curIdx := -1
+	for i, it := range items {
+		if it == k.selected.obj {
+			curIdx = i
+			break
 		}
-		if nxtObj == nil {
-			return
-		}
-		setColor(k.selected.obj, k.selected.previousColor)
-		c := setColor(nxtObj, highlightColor)
+	}
+	// 下一个索引，循环
+	nextIdx := (curIdx + 1) % len(items)
+	// 切换高亮
+	setColor(k.selected.obj, k.selected.previousColor)
+	c := setColor(items[nextIdx], highlightColor)
+	k.selected = selectItem{
+		where:         nextIdx,
+		obj:           items[nextIdx],
+		previousColor: c,
+	}
+}
 
-		k.selected = selectItem{
-			where:         nextItemID,
-			obj:           nxtObj,
-			previousColor: c,
+// 递归收集所有可选项
+func flattenItems(obj tview.Primitive) []tview.Primitive {
+	var result []tview.Primitive
+	switch o := obj.(type) {
+	case *tview.Flex:
+		cnt := o.GetItemCount()
+		for i := 0; i < cnt; i++ {
+			child := o.GetItem(i)
+			if selectable(child) {
+				v := reflect.ValueOf(child)
+				f := reflect.Indirect(v).FieldByName("border")
+				if f.IsValid() && f.Kind() == reflect.Bool && !f.Bool() && allowDeepFocus(child) {
+					// 只递归无边框的容器
+					result = append(result, flattenItems(child)...)
+				} else {
+					result = append(result, child)
+				}
+			}
 		}
 	case *tui.Pages:
 		cur := o.GetCurrentPage()
-		k.switchToNextItem(selectItem{
-			where: -1,
-			obj:   cur,
-		})
+		if cur != nil {
+			result = append(result, flattenItems(cur)...)
+		}
+	default:
+		result = append(result, obj)
 	}
+	return result
 }
 
 func selectable(obj tview.Primitive) bool {
@@ -180,12 +206,13 @@ func selectable(obj tview.Primitive) bool {
 		return false
 	}
 }
+
 func setColor(primitive tview.Primitive, color tcell.Color) tcell.Color {
 	var c tcell.Color
 	switch obj := primitive.(type) {
 	case *tview.List:
-		c = obj.GetBorderColor()
-		obj.SetBorderColor(color)
+		c = obj.GetBackgroundColor()
+		obj.SetBackgroundColor(color)
 	case *tview.Box:
 		c = obj.GetBorderColor()
 		obj.SetBorderColor(color)

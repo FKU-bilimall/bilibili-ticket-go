@@ -2,9 +2,10 @@ package clock
 
 import (
 	"bilibili-ticket-go/bili/models/api"
+	"time"
+
 	"github.com/beevik/ntp"
 	"github.com/imroc/req/v3"
-	"time"
 )
 
 func GetBilibiliClockOffset() (time.Duration, error) {

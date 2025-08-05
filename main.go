@@ -11,16 +11,16 @@ import (
 	"bilibili-ticket-go/tui"
 	"bilibili-ticket-go/utils"
 	"fmt"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/DeRuina/timberjack"
 	"github.com/fatih/color"
 	"github.com/gdamore/tcell/v2"
 	"github.com/imroc/req/v3"
-	"github.com/navidys/tvxwidgets"
 	"github.com/rivo/tview"
 	"github.com/sirupsen/logrus"
-	"strconv"
-	"strings"
-	"time"
 )
 
 var logger = utils.GetLogger(global.GetLogger(), "main", nil)
@@ -86,12 +86,13 @@ func main() {
 		conf.Save()
 	}()
 	app = tview.NewApplication().EnableMouse(true).EnablePaste(true)
-	pages := tui.NewPages()
-	pages.SetBorder(true).SetTitle("BILIBILI CLIENT")
+	mainPages := tui.NewPages()
+	functionPages := tui.NewPages()
+	functionPages.SetBorder(true).SetTitle("BILIBILI CLIENT")
 	{
 		{
 			loggerTextview.ScrollToEnd()
-			pages.AddPage("logs",
+			functionPages.AddPage("logs",
 				tview.NewFlex().SetDirection(tview.FlexRow).AddItem(loggerTextview, 0, 1, false),
 				true,
 				false)
@@ -109,7 +110,10 @@ func main() {
 			}
 			if stat.Login {
 				t.Write([]byte(fmt.Sprintf("Welcome %s, Your UID is %d", stat.Name, stat.UID)))
-				err, _ := biliClient.CheckAndUpdateCookie()
+				err, f := biliClient.CheckAndUpdateCookie()
+				if f {
+					logger.Trace("Refresh cookie successfully.")
+				}
 				if err != nil {
 					logger.Errorf("CheckAndUpdateCookie error: %v", err)
 				}
@@ -203,10 +207,11 @@ func main() {
 				})
 				root.AddItem(btn, 3, 0, false)
 			}
-			pages.AddPage("client", root, true, true)
+			functionPages.AddPage("client", root, true, true)
 		}
 		{
 			root := tview.NewFlex().SetDirection(tview.FlexRow)
+
 			input := tview.NewInputField().
 				SetAcceptanceFunc(func(text string, ch rune) bool {
 					_, err := strconv.Atoi(text)
@@ -215,14 +220,41 @@ func main() {
 				SetLabel("Project ID: ").
 				SetFieldWidth(20).
 				SetPlaceholder("Enter Project ID")
-
-			input.SetDoneFunc(func(key tcell.Key) {
+			list := tview.NewList().ShowSecondaryText(false)
+			tickets := tview.NewFlex().SetDirection(tview.FlexColumn).AddItem(list, 0, 1, false)
+			var refreshFunc = func() {
+				list.Clear()
 				logger.Info("Project ID: ", input.GetText())
-				//err, i, b := biliClient.GetTicketSkuIDsByProjectID(input.GetText())
-			})
-			root.AddItem(input, 1, 0, false)
-			root.AddItem(tvxwidgets.NewSpinner().SetStyle(tvxwidgets.SpinnerDotsCircling), 1, 0, false)
-			pages.AddPage("ticket", root, true, false)
+				err, i, _ := biliClient.GetTicketSkuIDsByProjectID(input.GetText())
+				if err != nil {
+					logger.Errorf("GetTicketSkuIDsByProjectID error: %v", err)
+					return
+				}
+				for _, t := range i {
+					if t.Flags.Number != 5 && t.Flags.Number != 3 {
+						list.AddItem(fmt.Sprintf("%s-%s", t.Name, t.Desc), "", 0, nil)
+					}
+				}
+			}
+			input.SetFinishedFunc(func(key tcell.Key) { refreshFunc() })
+			root.AddItem(tview.NewFlex().
+				SetDirection(tview.FlexColumn).
+				AddItem(input, 32, 1, false).
+				AddItem(tview.NewBox(), 2, 0, false).
+				AddItem(tview.NewButton("OK").SetSelectedFunc(func() {
+					modal := tview.NewModal().SetText("确定要退出吗？").AddButtons([]string{"确定", "取消"})
+					modal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+						if buttonIndex == 0 {
+							app.Stop()
+						} else {
+							mainPages.RemovePage("quitModalPage")
+						}
+					})
+					mainPages.AddPage("quitModalPage", modal, true, true)
+				}), 4, 0, false),
+				1, 0, false)
+			root.AddItem(tickets, 0, 0, false)
+			functionPages.AddPage("ticket", root, true, false)
 		}
 	}
 	featureChoose := tview.NewFlex().SetDirection(tview.FlexRow)
@@ -234,14 +266,14 @@ func main() {
 			list.AddItem("Logs", "Latest Logs", 'o', func() {})
 			list.AddItem("Ticket", "Ticket Booking", 't', func() {})
 			list.SetSelectedFunc(func(i int, mt string, _ string, _ rune) {
-				pages.SetTitle(strings.ToUpper(mt))
+				functionPages.SetTitle(strings.ToUpper(mt))
 				switch i {
 				case 0:
-					pages.SwitchToPage("client")
+					functionPages.SwitchToPage("client")
 				case 1:
-					pages.SwitchToPage("logs")
+					functionPages.SwitchToPage("logs")
 				case 2:
-					pages.SwitchToPage("ticket")
+					functionPages.SwitchToPage("ticket")
 				}
 			})
 			featureChoose.AddItem(list, 0, 1, true)
@@ -249,8 +281,9 @@ func main() {
 	}
 	flex := tview.NewFlex().
 		AddItem(featureChoose, 25, 1, false).
-		AddItem(pages, 0, 4, false)
-	k := keyboard.NewKeyboardCaptureInstance(app, flex)
+		AddItem(functionPages, 0, 4, false)
+	mainPages.AddPage("main", flex, true, true)
+	k := keyboard.NewKeyboardCaptureInstance(app, mainPages)
 	app.SetInputCapture(k.InputCapture)
 	app.SetMouseCapture(func(event *tcell.EventMouse, action tview.MouseAction) (*tcell.EventMouse, tview.MouseAction) {
 		if k.Selected() && (action == tview.MouseRightClick || action == tview.MouseMiddleClick || action == tview.MouseLeftClick) {

@@ -1,9 +1,10 @@
 package utils
 
 import (
-	"github.com/fatih/color"
 	"strconv"
 	"strings"
+
+	"github.com/fatih/color"
 )
 
 func hexToColor(hex string) (*color.Color, error) {

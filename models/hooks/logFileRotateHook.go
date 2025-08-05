@@ -2,9 +2,10 @@ package hooks
 
 import (
 	"bilibili-ticket-go/utils"
+	"sync"
+
 	"github.com/DeRuina/timberjack"
 	"github.com/sirupsen/logrus"
-	"sync"
 )
 
 func NewLogFileRotateHook(logger *timberjack.Logger) logrus.Hook {

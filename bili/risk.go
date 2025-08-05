@@ -11,11 +11,12 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"github.com/imroc/req/v3"
 	"net/http"
 	"net/url"
 	"regexp"
 	"time"
+
+	"github.com/imroc/req/v3"
 )
 
 func (c *Client) CheckAndUpdateCookie() (error, bool) {
@@ -147,8 +148,8 @@ func (c *Client) getRefreshCSRF(correspondPath string) (error, string) {
 func (c *Client) refreshCookie(csrf string, refreshCsrfToken string, refreshToken string) (error, string) {
 	res, err := c.http.R().SetFormData(map[string]string{
 		"refresh_token": refreshToken,
-		"source":        "main-fe-header",
-		"csrf_token":    refreshCsrfToken,
+		"source":        "main_web",
+		"refresh_csrf":  refreshCsrfToken,
 		"csrf":          csrf,
 	}).Post("https://passport.bilibili.com/x/passport-login/web/cookie/refresh")
 	if err != nil {
@@ -169,7 +170,7 @@ func (c *Client) setPreviousCookieInvalid(newCsrf string, oldRefreshToken string
 	res, err := c.http.R().SetFormData(map[string]string{
 		"refresh_token": oldRefreshToken,
 		"csrf":          newCsrf,
-	}).Post("https://passport.bilibili.com/x/passport-login/web/cookie/refresh")
+	}).Post("https://passport.bilibili.com/x/passport-login/web/confirm/refresh")
 	if err != nil {
 		return err
 	}
@@ -198,7 +199,7 @@ func (c *Client) RefreshNewBiliTicket() (error, bool) {
 	parsedURL, _ := url.Parse("https://www.bilibili.com/")
 	for _, cookie := range c.cookie.Cookies(parsedURL) {
 		if cookie.Name == "bili_ticket" {
-			if cookie.Expires.Sub(time.Now()) >= 1*time.Minute {
+			if cookie.Expires.Sub(time.Now()) >= 1*time.Hour {
 				return nil, false
 			}
 		}

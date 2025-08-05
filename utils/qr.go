@@ -1,8 +1,9 @@
 package utils
 
 import (
-	"github.com/skip2/go-qrcode"
 	"image"
+
+	"github.com/skip2/go-qrcode"
 )
 
 func GetQRCode(content string, isFlat bool) ([]string, image.Image) {

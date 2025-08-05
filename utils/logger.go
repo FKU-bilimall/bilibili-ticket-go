@@ -2,10 +2,11 @@ package utils
 
 import (
 	"fmt"
-	"github.com/fatih/color"
-	"github.com/sirupsen/logrus"
 	"strings"
 	"time"
+
+	"github.com/fatih/color"
+	"github.com/sirupsen/logrus"
 )
 
 type LogAdditionalParts struct {

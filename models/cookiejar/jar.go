@@ -98,7 +98,7 @@ func newAtTime(o *Options, now time.Time) *Jar {
 		jar.psList = publicsuffix.List
 	}
 	if o.DefaultCookies != nil {
-		jar.merge(o.DefaultCookies)
+		jar.defaultMerge(o.DefaultCookies)
 	}
 	jar.deleteExpired(now)
 	return jar
@@ -267,7 +267,11 @@ func (j *Jar) cookies(u *url.URL, now time.Time) (cookies []*http.Cookie) {
 
 	sort.Sort(byPathLength(selected))
 	for _, e := range selected {
-		cookies = append(cookies, &http.Cookie{Name: e.Name, Value: e.Value})
+		cookies = append(cookies, &http.Cookie{
+			Name:    e.Name,
+			Value:   e.Value,
+			Expires: time.Unix(e.Expires, 0),
+		})
 	}
 
 	return cookies
@@ -329,6 +333,22 @@ func (j *Jar) RemoveCookie(c *http.Cookie) {
 	}
 }
 
+func (j *Jar) defaultMerge(entries []CookieEntries) {
+	for _, e := range entries {
+		if e.CanonicalHost == "" {
+			e.CanonicalHost = e.Domain
+		}
+		key := jarKey(e.CanonicalHost, j.psList)
+		id := e.id()
+		submap := j.entries[key]
+		if submap == nil {
+			submap = make(map[string]CookieEntries)
+			j.entries[key] = submap
+		}
+		submap[id] = e
+	}
+}
+
 // merge merges all the given entries into j. More recently changed
 // cookies take precedence over older ones.
 func (j *Jar) merge(entries []CookieEntries) {
@@ -352,15 +372,13 @@ func (j *Jar) merge(entries []CookieEntries) {
 	}
 }
 
-var expiryRemovalDuration = 24 * time.Hour
-
 // deleteExpired deletes all entries that have expired for long enough
 // that we can actually expect there to be no external copies of it that
 // might resurrect the dead cookie.
 func (j *Jar) deleteExpired(now time.Time) {
 	for tld, submap := range j.entries {
 		for id, e := range submap {
-			if !time.Unix(e.Updated, 0).After(now) && !time.Unix(e.Updated, 0).Add(expiryRemovalDuration).After(now) {
+			if time.Unix(e.Expires, 0).Before(now) {
 				delete(submap, id)
 			}
 		}

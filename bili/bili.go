@@ -5,8 +5,9 @@ import (
 	"bilibili-ticket-go/global"
 	"bilibili-ticket-go/utils"
 	"fmt"
-	"github.com/imroc/req/v3"
 	"net/http"
+
+	"github.com/imroc/req/v3"
 )
 
 const model = "SM-S9080"
