@@ -8,7 +8,8 @@ import (
 	"bilibili-ticket-go/models"
 	"bilibili-ticket-go/models/cookiejar"
 	"bilibili-ticket-go/models/hooks"
-	"bilibili-ticket-go/tui"
+	"bilibili-ticket-go/tui/primitives"
+	tutils "bilibili-ticket-go/tui/utils"
 	"bilibili-ticket-go/utils"
 	"fmt"
 	"strconv"
@@ -23,26 +24,29 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var logger = utils.GetLogger(global.GetLogger(), "main", nil)
-var biliClient *client.Client = nil
-var conf *models.Configuration = nil
-var jar *cookiejar.Jar = nil
-var app *tview.Application = nil
-var loggerTextview *tview.TextView = nil
-var fileLogger = &timberjack.Logger{
-	Filename:   "logs/latest.log", // Choose an appropriate path
-	MaxSize:    100,               // megabytes
-	MaxBackups: 10,                // backups
-	MaxAge:     7,                 // days
-	Compress:   false,             // default: false
-	LocalTime:  true,              // default: false (use UTC)
-	//RotationInterval: time.Hour * 24,    // Rotate daily if no other rotation met
-	BackupTimeFormat: "20060102-150405", // Rotated files will have format <logfilename>-2006-01-02-15-04-05-<rotationCriterion>-timberjack.log
-}
+var (
+	logger         = utils.GetLogger(global.GetLogger(), "main", nil)
+	biliClient     *client.Client
+	conf           *models.Configuration
+	jar            *cookiejar.Jar
+	app            *tview.Application
+	loggerTextview *tview.TextView
+	fileLogger     = &timberjack.Logger{
+		Filename:         "logs/latest.log",
+		MaxSize:          100, // megabytes
+		MaxBackups:       30,  // backups
+		MaxAge:           7,   // days
+		Compress:         false,
+		LocalTime:        true,
+		BackupTimeFormat: "20060102-150405",
+	}
+)
 
 func init() {
 	global.GetLogger().AddHook(hooks.NewLogFileRotateHook(fileLogger))
-	fileLogger.Rotate()
+	if !utils.IsFileEmpty("logs/latest.log") {
+		fileLogger.Rotate()
+	}
 	loggerTextview = tview.NewTextView()
 	loggerTextview.SetDynamicColors(true).
 		SetScrollable(true).
@@ -69,10 +73,18 @@ func init() {
 }
 
 func main() {
-	bc, _ := clock.GetBilibiliClockOffset()
-	ac, _ := clock.GetAliyunClockOffset()
-	logger.Trace("The Offest Between You and Bilibili Server: ", bc)
-	logger.Trace("The Offest Between You and Aliyun NTP Server: ", ac)
+	bc, err := clock.GetBilibiliClockOffset()
+	if err != nil {
+		logger.Warn("Failed to get Bilibili clock offset: ", err)
+	} else {
+		logger.Trace("The Offset Between You and Bilibili Server: ", bc)
+	}
+	ac, err := clock.GetAliyunClockOffset()
+	if err != nil {
+		logger.Warn("Failed to get Aliyun clock offset: ", err)
+	} else {
+		logger.Trace("The Offset Between You and Aliyun NTP Server: ", ac)
+	}
 	defer fileLogger.Close()
 	defer func() {
 		var ck = jar.AllPersistentEntries()
@@ -86,9 +98,14 @@ func main() {
 		conf.Save()
 	}()
 	app = tview.NewApplication().EnableMouse(true).EnablePaste(true)
-	mainPages := tui.NewPages()
-	functionPages := tui.NewPages()
+	mainPages := primitives.NewPages()
+	functionPages := primitives.NewPages()
 	functionPages.SetBorder(true).SetTitle("BILIBILI CLIENT")
+	featureChoose := tview.NewFlex().SetDirection(tview.FlexRow)
+	flex := tview.NewFlex().
+		AddItem(featureChoose, 25, 1, false).
+		AddItem(functionPages, 0, 4, false)
+	k := keyboard.NewKeyboardCaptureInstance(app, flex)
 	{
 		{
 			loggerTextview.ScrollToEnd()
@@ -242,22 +259,15 @@ func main() {
 				AddItem(input, 32, 1, false).
 				AddItem(tview.NewBox(), 2, 0, false).
 				AddItem(tview.NewButton("OK").SetSelectedFunc(func() {
-					modal := tview.NewModal().SetText("确定要退出吗？").AddButtons([]string{"确定", "取消"})
-					modal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
-						if buttonIndex == 0 {
-							app.Stop()
-						} else {
-							mainPages.RemovePage("quitModalPage")
-						}
-					})
-					mainPages.AddPage("quitModalPage", modal, true, true)
+					tutils.PopupModal("TEST", mainPages, map[string]func() bool{
+						"OK": func() bool { return true },
+					}, k)
 				}), 4, 0, false),
 				1, 0, false)
 			root.AddItem(tickets, 0, 0, false)
 			functionPages.AddPage("ticket", root, true, false)
 		}
 	}
-	featureChoose := tview.NewFlex().SetDirection(tview.FlexRow)
 	{
 		featureChoose.SetBorder(true).SetTitle("Features")
 		{
@@ -279,11 +289,7 @@ func main() {
 			featureChoose.AddItem(list, 0, 1, true)
 		}
 	}
-	flex := tview.NewFlex().
-		AddItem(featureChoose, 25, 1, false).
-		AddItem(functionPages, 0, 4, false)
 	mainPages.AddPage("main", flex, true, true)
-	k := keyboard.NewKeyboardCaptureInstance(app, mainPages)
 	app.SetInputCapture(k.InputCapture)
 	app.SetMouseCapture(func(event *tcell.EventMouse, action tview.MouseAction) (*tcell.EventMouse, tview.MouseAction) {
 		if k.Selected() && (action == tview.MouseRightClick || action == tview.MouseMiddleClick || action == tview.MouseLeftClick) {
@@ -310,7 +316,7 @@ func main() {
 			}
 		}
 	}()
-	if err := app.SetRoot(flex, true).Run(); err != nil {
+	if err := app.SetRoot(mainPages, true).Run(); err != nil {
 		logger.Fatal(err)
 	}
 }

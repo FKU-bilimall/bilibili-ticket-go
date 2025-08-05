@@ -1,8 +1,9 @@
-package tui
+package primitives
 
 import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+	"reflect"
 )
 
 // page represents one page of a Pages object.
@@ -91,7 +92,7 @@ func (p *Pages) AddPage(name string, item tview.Primitive, resize, visible bool)
 			break
 		}
 	}
-	if visible {
+	/*	if visible {
 		for _, page := range p.pages {
 			if page.Visible == true {
 				page.Visible = false
@@ -101,7 +102,7 @@ func (p *Pages) AddPage(name string, item tview.Primitive, resize, visible bool)
 				break
 			}
 		}
-	}
+	}*/
 	p.pages = append(p.pages, &page{Item: item, Name: name, Resize: resize, Visible: visible})
 	if p.changed != nil {
 		p.changed()
@@ -326,4 +327,32 @@ func (p *Pages) PasteHandler() func(pastedText string, setFocus func(p tview.Pri
 			}
 		}
 	})
+}
+
+func (p *Pages) SetOthersClickableStat(allowIndex int) {
+	for i, page := range p.pages {
+		v := reflect.ValueOf(page.Item)
+		// SetInputCapture
+		method := v.MethodByName("SetInputCapture")
+		if method.IsValid() {
+			if i == allowIndex {
+				method.Call([]reflect.Value{reflect.Zero(reflect.TypeOf(func(*tcell.EventKey) *tcell.EventKey { return nil }))})
+			} else {
+				fn := func(event *tcell.EventKey) *tcell.EventKey { return nil }
+				method.Call([]reflect.Value{reflect.ValueOf(fn)})
+			}
+		}
+		// SetMouseCapture
+		method = v.MethodByName("SetMouseCapture")
+		if method.IsValid() {
+			if i == allowIndex {
+				method.Call([]reflect.Value{reflect.Zero(reflect.TypeOf(func(tview.MouseAction, *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) { return 0, nil }))})
+			} else {
+				fn := func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+					return tview.MouseConsumed, nil
+				}
+				method.Call([]reflect.Value{reflect.ValueOf(fn)})
+			}
+		}
+	}
 }

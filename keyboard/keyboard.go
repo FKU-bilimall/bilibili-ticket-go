@@ -3,9 +3,10 @@ package keyboard
 import (
 	"bilibili-ticket-go/global"
 	"bilibili-ticket-go/models"
-	"bilibili-ticket-go/tui"
+	"bilibili-ticket-go/tui/primitives"
 	"bilibili-ticket-go/utils"
 	"reflect"
+	"sync"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -18,10 +19,12 @@ type selectItem struct {
 }
 
 type KeyboardCaptureInstance struct {
-	stack    *models.Stack[selectItem]
-	app      *tview.Application
-	root     tview.Primitive
-	selected selectItem
+	stack       *models.Stack[selectItem]
+	app         *tview.Application
+	root        tview.Primitive
+	selected    selectItem
+	isOpenModal bool
+	mutex       sync.Mutex
 }
 
 var logger = utils.GetLogger(global.GetLogger(), "keyboard", nil)
@@ -49,6 +52,8 @@ func (k *KeyboardCaptureInstance) Selected() bool {
 }
 
 func (k *KeyboardCaptureInstance) Reset() {
+	k.mutex.Lock()
+	defer k.mutex.Unlock()
 	// 恢复当前选中项的颜色（如果有）
 	if k.selected.obj != nil {
 		setColor(k.selected.obj, k.selected.previousColor)
@@ -71,6 +76,12 @@ func (k *KeyboardCaptureInstance) Reset() {
 }
 
 func (k *KeyboardCaptureInstance) InputCapture(event *tcell.EventKey) *tcell.EventKey {
+	k.mutex.Lock()
+	defer k.mutex.Unlock()
+	if k.isOpenModal {
+		return event
+	}
+
 	if event.Key() == tcell.KeyEscape {
 		if k.selected.obj != k.root && k.selected.obj != nil && k.app.GetFocus() == k.selected.obj {
 			current := k.stack.Top()
@@ -129,7 +140,7 @@ func (k *KeyboardCaptureInstance) InputCapture(event *tcell.EventKey) *tcell.Eve
 					obj:   nil,
 				}
 				return nil
-			case *tui.Pages:
+			case *primitives.Pages:
 				k.stack.Push(k.selected)
 				k.selected = selectItem{
 					where: -1,
@@ -168,6 +179,12 @@ func (k *KeyboardCaptureInstance) switchToNextItem(box selectItem) {
 	}
 }
 
+func (k *KeyboardCaptureInstance) SetIsOpenModel(stat bool) {
+	k.mutex.Lock()
+	defer k.mutex.Unlock()
+	k.isOpenModal = stat
+}
+
 // 递归收集所有可选项
 func flattenItems(obj tview.Primitive) []tview.Primitive {
 	var result []tview.Primitive
@@ -187,7 +204,7 @@ func flattenItems(obj tview.Primitive) []tview.Primitive {
 				}
 			}
 		}
-	case *tui.Pages:
+	case *primitives.Pages:
 		cur := o.GetCurrentPage()
 		if cur != nil {
 			result = append(result, flattenItems(cur)...)
@@ -200,7 +217,7 @@ func flattenItems(obj tview.Primitive) []tview.Primitive {
 
 func selectable(obj tview.Primitive) bool {
 	switch obj.(type) {
-	case *tview.List, *tview.Box, *tview.Flex, *tview.Grid, *tview.Button, *tui.Pages, *tview.InputField:
+	case *tview.List, *tview.Flex, *tview.Grid, *tview.Button, *primitives.Pages, *tview.InputField:
 		return true
 	default:
 		return false
@@ -225,7 +242,7 @@ func setColor(primitive tview.Primitive, color tcell.Color) tcell.Color {
 	case *tview.Button:
 		c = obj.GetBackgroundColor()
 		obj.SetStyle(tcell.StyleDefault.Background(color))
-	case *tui.Pages:
+	case *primitives.Pages:
 		c = obj.GetBorderColor()
 		obj.SetBorderColor(color)
 	case *tview.InputField:
@@ -238,7 +255,7 @@ func setColor(primitive tview.Primitive, color tcell.Color) tcell.Color {
 
 func allowDeepFocus(obj tview.Primitive) bool {
 	switch obj.(type) {
-	case *tview.Grid, *tview.Flex, *tui.Pages:
+	case *tview.Grid, *tview.Flex, *primitives.Pages:
 		return true
 	default:
 		return false
