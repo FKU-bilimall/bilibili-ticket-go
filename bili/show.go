@@ -55,18 +55,18 @@ func (c *Client) GetTicketSkuIDsByProjectID(projectID string) (error, []r.Ticket
 	return nil, tickets, data.Data.HotProject
 }
 
-func (c *Client) GetRequestTokenAndPToken(ct *token.CTokenGenerator, projectID string, ticket r.TicketSkuScreenID, isHotProject bool) (error, *r.RequestTokenAndPToken) {
+func (c *Client) GetRequestTokenAndPToken(tk token.Generator, projectID string, ticket r.TicketSkuScreenID) (error, *r.RequestTokenAndPToken) {
 	form := map[string]string{
 		"project_id":    projectID,
 		"screen_id":     strconv.Itoa(ticket.ScreenID),
 		"order_type":    "1",
 		"count":         "1",
 		"sku_id":        strconv.Itoa(ticket.SkuID),
-		"token":         ct.GenerateCTokenPrepareStage(),
 		"requestSource": "pc-new",
 	}
-	if isHotProject {
+	if tk.IsHotProject() {
 		form["newRisk"] = "true"
+		form["token"] = tk.GenerateTokenPrepareStage()
 	}
 	req, err := c.http.R().SetFormData(form).Post("https://show.bilibili.com/api/ticket/order/prepare?project_id=" + projectID)
 	if err != nil {
@@ -110,7 +110,7 @@ func (c *Client) GetConfirmInformation(tokens *r.RequestTokenAndPToken, projectI
 	return nil, &data.Data
 }
 
-func (c *Client) SubmitOrder(ct *token.CTokenGenerator, whenGenPToken time.Time, tokens *r.RequestTokenAndPToken, projectID string, ticket r.TicketSkuScreenID, buyer *api.BuyerStruct, isHotProject bool) (error, int, *api.TicketOrderStruct) {
+func (c *Client) SubmitOrder(tk token.Generator, whenGenPToken time.Time, tokens *r.RequestTokenAndPToken, projectID string, ticket r.TicketSkuScreenID, buyer *api.BuyerStruct) (error, int, *api.TicketOrderStruct) {
 	bs, err := json.Marshal([1]*api.BuyerStruct{buyer})
 	if err != nil {
 		return err, -1, nil
@@ -126,13 +126,14 @@ func (c *Client) SubmitOrder(ct *token.CTokenGenerator, whenGenPToken time.Time,
 		"buyer_info":    string(bs),
 		"click_postion": fmt.Sprintf("{\"x\":948,\"y\":997,\"origin\":%d,\"now\":%d}", whenGenPToken, time.Now().Unix()),
 		"sku_id":        strconv.Itoa(ticket.SkuID),
-		"ctoken":        ct.GenerateCTokenCreateStage(whenGenPToken),
-		"ptoken":        tokens.PToken,
-		"token":         tokens.RequestToken,
 		"requestSource": "pc-new",
 	}
-	if isHotProject {
+	if tk.IsHotProject() {
 		form["newRisk"] = "true"
+		form["ctoken"] = tk.GenerateTokenCreateStage(whenGenPToken)
+		form["ptoken"] = tokens.PToken
+		form["token"] = tokens.RequestToken
+		form["orderCreateUrl"] = "https://show.bilibili.com/api/ticket/order/createV2"
 	}
 	req, err := c.http.R().SetFormData(form).Post("https://show.bilibili.com/api/ticket/order/createV2?project_id=" + projectID)
 	var data api.ShowApiDataRoot[api.TicketOrderStruct]

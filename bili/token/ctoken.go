@@ -107,7 +107,7 @@ func makeToken(w *windowStats) string {
 	return encoded
 }
 
-func (g *CTokenGenerator) GenerateCTokenPrepareStage() string {
+func (g *CTokenGenerator) GenerateTokenPrepareStage() string {
 	t := makeToken(&windowStats{
 		TouchCount:   uint16(rand.IntN(7) + 3),
 		VisibleCount: uint16(rand.IntN(13) + 3),
@@ -130,7 +130,7 @@ func (g *CTokenGenerator) GenerateCTokenPrepareStage() string {
 	return t
 }
 
-func (g *CTokenGenerator) GenerateCTokenCreateStage(whenGenPToken time.Time) string {
+func (g *CTokenGenerator) GenerateTokenCreateStage(whenGenPToken time.Time) string {
 	t := makeToken(&windowStats{
 		TouchCount:   uint16(rand.IntN(7) + 3),
 		VisibleCount: uint16(rand.IntN(13) + 3),
@@ -151,4 +151,8 @@ func (g *CTokenGenerator) GenerateCTokenCreateStage(whenGenPToken time.Time) str
 	})
 	g.generateCounts++
 	return t
+}
+
+func (g *CTokenGenerator) IsHotProject() bool {
+	return true
 }

@@ -241,10 +241,14 @@ func main() {
 			tickets := tview.NewFlex().SetDirection(tview.FlexColumn).AddItem(list, 0, 1, false)
 			var refreshFunc = func() {
 				list.Clear()
-				logger.Info("Project ID: ", input.GetText())
+				if input.GetText() == "" {
+					return
+				}
 				err, i, _ := biliClient.GetTicketSkuIDsByProjectID(input.GetText())
 				if err != nil {
-					logger.Errorf("GetTicketSkuIDsByProjectID error: %v", err)
+					tutils.PopupModal(fmt.Sprintf("Bilibili API Returned An Unexpected Value,\n%s", err), mainPages, map[string]func() bool{
+						"OK": func() bool { return true },
+					}, k)
 					return
 				}
 				for _, t := range i {
@@ -253,18 +257,15 @@ func main() {
 					}
 				}
 			}
-			input.SetFinishedFunc(func(key tcell.Key) { refreshFunc() })
+			input.SetDoneFunc(func(key tcell.Key) { refreshFunc() })
 			root.AddItem(tview.NewFlex().
 				SetDirection(tview.FlexColumn).
 				AddItem(input, 32, 1, false).
 				AddItem(tview.NewBox(), 2, 0, false).
-				AddItem(tview.NewButton("OK").SetSelectedFunc(func() {
-					tutils.PopupModal("TEST", mainPages, map[string]func() bool{
-						"OK": func() bool { return true },
-					}, k)
-				}), 4, 0, false),
+				AddItem(tview.NewButton("OK").SetSelectedFunc(refreshFunc), 4, 0, false),
 				1, 0, false)
-			root.AddItem(tickets, 0, 0, false)
+			root.AddItem(tview.NewBox(), 1, 0, false)
+			root.AddItem(tickets, 0, 1, false)
 			functionPages.AddPage("ticket", root, true, false)
 		}
 	}
