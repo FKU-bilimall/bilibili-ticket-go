@@ -3,6 +3,8 @@ package main
 import (
 	client "bilibili-ticket-go/bili"
 	"bilibili-ticket-go/bili/clock"
+	_return "bilibili-ticket-go/bili/models/return"
+	"bilibili-ticket-go/bili/token"
 	"bilibili-ticket-go/global"
 	"bilibili-ticket-go/keyboard"
 	"bilibili-ticket-go/models"
@@ -14,6 +16,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/DeRuina/timberjack"
@@ -227,36 +230,111 @@ func main() {
 			functionPages.AddPage("client", root, true, true)
 		}
 		{
+			var (
+				tickets        []_return.TicketSkuScreenID
+				selectedTicket _return.TicketSkuScreenID
+				mutex          = sync.Mutex{} // Mutex to protect shared data
+				projectID      string
+				hotProject     bool
+				//ticketGen      token.Generator
+			)
+			var (
+				ticketList *tview.DropDown
+				buyerList  *tview.DropDown
+				input      *tview.InputField
+				resetFunc  = func() {
+					mutex.Lock()
+					defer mutex.Unlock()
+					tickets = *new([]_return.TicketSkuScreenID)
+					selectedTicket = *new(_return.TicketSkuScreenID)
+					ticketList.SetOptions([]string{"Nothing"}, nil)
+					buyerList.SetOptions([]string{"Nothing"}, nil)
+				}
+				refreshFunc = func() {
+					resetFunc()
+					mutex.Lock()
+					defer mutex.Unlock()
+					if input.GetText() == "" {
+						return
+					}
+					var i []_return.TicketSkuScreenID
+					err, i, hotProject = biliClient.GetTicketSkuIDsByProjectID(input.GetText())
+					tickets = i
+					if err != nil {
+						logger.Errorf("GetTicketSkuIDsByProjectID error: %v", err)
+						tutils.PopupModal(fmt.Sprintf("Bilibili API Returned An Unexpected Value,\n%s", err), mainPages, map[string]func() bool{
+							"OK": func() bool { return true },
+						}, k)
+						return
+					}
+					ticketList.SetOptions(nil, nil)
+					var options []string
+					for _, t := range i {
+						if t.Flags.Number == 2 { //t.Flags.Number != 5 && t.Flags.Number != 3 && t.Flags.Number != 4 {
+							options = append(options, fmt.Sprintf("%s-%s", t.Name, t.Desc))
+						}
+					}
+					ticketList.SetOptions(options, func(text string, index int) {
+						mutex.Lock()
+						defer mutex.Unlock()
+						for _, t := range tickets {
+							if (fmt.Sprintf("%s-%s", t.Name, t.Desc)) == text {
+								selectedTicket = t
+								break
+							}
+						}
+						//TODO ticket check
+						var tkgen token.Generator
+						if hotProject {
+							tkgen = token.NewCTokenGenerator()
+						} else {
+							tkgen = token.NewNormalTokenGenerator()
+						}
+						err, tokens := biliClient.GetRequestTokenAndPToken(tkgen, projectID, selectedTicket)
+						if err != nil {
+							logger.Errorf("GetRequestTokenAndPToken error: %v", err)
+							tutils.PopupModal(fmt.Sprintf("Bilibili API Returned An Unexpected Value,\n%s", err), mainPages, map[string]func() bool{
+								"OK": func() bool { return true },
+							}, k)
+							return
+						}
+						err, confirm := biliClient.GetConfirmInformation(tokens, projectID)
+						if err != nil {
+							logger.Errorf("GetConfirmInformation error: %v", err)
+							tutils.PopupModal(fmt.Sprintf("Bilibili API Returned An Unexpected Value,\n%s", err), mainPages, map[string]func() bool{
+								"OK": func() bool { return true },
+							}, k)
+							return
+						}
+						var buyers []string
+						for _, buyer := range confirm.BuyerList.List {
+							buyers = append(buyers, fmt.Sprintf("%s-%s-%s", buyer.Name, buyer.Tel, buyer.PersonalId))
+						}
+						buyerList.SetOptions(buyers, nil)
+					})
+				}
+			)
 			root := tview.NewFlex().SetDirection(tview.FlexRow)
-
-			input := tview.NewInputField().
+			buyerList = tview.NewDropDown().SetLabel("Select Buyer: ").SetOptions([]string{"Nothing"}, nil)
+			ticketList = tview.NewDropDown().SetLabel("Select Ticket: ").SetOptions([]string{"Nothing"}, nil)
+			resetFunc = func() {
+				mutex.Lock()
+				defer mutex.Unlock()
+				ticketList.SetOptions([]string{"Nothing"}, nil)
+				buyerList.SetOptions([]string{"Nothing"}, nil)
+			}
+			input = tview.NewInputField().
 				SetAcceptanceFunc(func(text string, ch rune) bool {
 					_, err := strconv.Atoi(text)
 					return err == nil
 				}).
 				SetLabel("Project ID: ").
 				SetFieldWidth(20).
-				SetPlaceholder("Enter Project ID")
-			list := tview.NewList().ShowSecondaryText(false)
-			tickets := tview.NewFlex().SetDirection(tview.FlexColumn).AddItem(list, 0, 1, false)
-			var refreshFunc = func() {
-				list.Clear()
-				if input.GetText() == "" {
-					return
-				}
-				err, i, _ := biliClient.GetTicketSkuIDsByProjectID(input.GetText())
-				if err != nil {
-					tutils.PopupModal(fmt.Sprintf("Bilibili API Returned An Unexpected Value,\n%s", err), mainPages, map[string]func() bool{
-						"OK": func() bool { return true },
-					}, k)
-					return
-				}
-				for _, t := range i {
-					if t.Flags.Number != 5 && t.Flags.Number != 3 {
-						list.AddItem(fmt.Sprintf("%s-%s", t.Name, t.Desc), "", 0, nil)
-					}
-				}
-			}
+				SetPlaceholder("Enter Project ID").
+				SetChangedFunc(func(text string) {
+					resetFunc()
+					projectID = text
+				})
 			input.SetDoneFunc(func(key tcell.Key) { refreshFunc() })
 			root.AddItem(tview.NewFlex().
 				SetDirection(tview.FlexColumn).
@@ -265,7 +343,9 @@ func main() {
 				AddItem(tview.NewButton("OK").SetSelectedFunc(refreshFunc), 4, 0, false),
 				1, 0, false)
 			root.AddItem(tview.NewBox(), 1, 0, false)
-			root.AddItem(tickets, 0, 1, false)
+			root.AddItem(ticketList, 1, 0, false)
+			root.AddItem(tview.NewBox(), 1, 0, false)
+			root.AddItem(buyerList, 1, 0, false)
 			functionPages.AddPage("ticket", root, true, false)
 		}
 	}

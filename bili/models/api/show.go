@@ -9,13 +9,26 @@ import (
 type ShowApiDataRoot[T any] struct {
 	ErrTag    int    `json:"errtag"`
 	ErrNumber int    `json:"errno"`
+	Code      int    `json:"code"`
 	Message   string `json:"message"`
+	Msg       string `json:"msg"`
 	Data      T      `json:"data"`
 }
 
 func (r *ShowApiDataRoot[T]) CheckValid() error {
-	if r.ErrNumber != 0 {
-		return errors.New(fmt.Sprintf("Response code is not 0, got: %d, message: %s, error tag: %d", r.ErrTag, r.Message, r.ErrTag))
+	if r.ErrNumber != 0 || r.Code != 0 {
+		var (
+			c int
+			m string
+		)
+		if r.ErrNumber != 0 {
+			c = r.ErrNumber
+			m = r.Msg
+		} else {
+			c = r.Code
+			m = r.Message
+		}
+		return errors.New(fmt.Sprintf("Response code is not 0, got: %d, message: %s", c, m))
 	}
 	return nil
 }

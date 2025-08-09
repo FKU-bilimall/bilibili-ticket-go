@@ -1,7 +1,11 @@
-/bilibili-ticket-go.exe
-/bilibili-ticket-go
+##Copilot
+/.idea/copilotDiffState.xml
+##DEBUG
+bilibili-ticket-go*
+__debug_bin*
+test.go
+##Generate Files
 /config.json
 /dist
 /logs
-test.go
-/.idea/copilotDiffState.xml
+

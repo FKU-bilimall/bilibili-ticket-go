@@ -56,19 +56,19 @@ func (c *Client) GetTicketSkuIDsByProjectID(projectID string) (error, []r.Ticket
 }
 
 func (c *Client) GetRequestTokenAndPToken(tk token.Generator, projectID string, ticket r.TicketSkuScreenID) (error, *r.RequestTokenAndPToken) {
-	form := map[string]string{
+	form := map[string]any{
 		"project_id":    projectID,
-		"screen_id":     strconv.Itoa(ticket.ScreenID),
-		"order_type":    "1",
-		"count":         "1",
-		"sku_id":        strconv.Itoa(ticket.SkuID),
+		"screen_id":     ticket.ScreenID,
+		"order_type":    1,
+		"count":         1,
+		"sku_id":        ticket.SkuID,
 		"requestSource": "pc-new",
 	}
 	if tk.IsHotProject() {
-		form["newRisk"] = "true"
+		form["newRisk"] = true
 		form["token"] = tk.GenerateTokenPrepareStage()
 	}
-	req, err := c.http.R().SetFormData(form).Post("https://show.bilibili.com/api/ticket/order/prepare?project_id=" + projectID)
+	req, err := c.http.R().SetBodyJsonMarshal(form).Post("https://show.bilibili.com/api/ticket/order/prepare?project_id=" + projectID)
 	if err != nil {
 		return err, nil
 	}
