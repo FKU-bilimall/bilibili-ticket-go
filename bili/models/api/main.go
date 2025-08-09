@@ -1,8 +1,7 @@
 package api
 
 import (
-	"errors"
-	"fmt"
+	"bilibili-ticket-go/models/errors"
 )
 
 // MainApiDataRoot 主站API基类
@@ -14,7 +13,7 @@ type MainApiDataRoot[T any] struct {
 
 func (r *MainApiDataRoot[T]) CheckValid() error {
 	if r.Code != 0 {
-		return errors.New(fmt.Sprintf("Response code is not 0, got: %d, message: %s", r.Code, r.Message))
+		return errors.NewBilibiliAPIError(r.Code, r.Message)
 	}
 	return nil
 }

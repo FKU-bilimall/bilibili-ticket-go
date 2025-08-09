@@ -1,8 +1,7 @@
 package api
 
 import (
-	"errors"
-	"fmt"
+	"bilibili-ticket-go/models/errors"
 )
 
 // ShowApiDataRoot 漫展API基类
@@ -28,7 +27,7 @@ func (r *ShowApiDataRoot[T]) CheckValid() error {
 			c = r.Code
 			m = r.Message
 		}
-		return errors.New(fmt.Sprintf("Response code is not 0, got: %d, message: %s", c, m))
+		return errors.NewBilibiliAPIError(c, m)
 	}
 	return nil
 }

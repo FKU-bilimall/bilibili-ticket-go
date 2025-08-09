@@ -239,10 +239,43 @@ func main() {
 				//ticketGen      token.Generator
 			)
 			var (
-				ticketList *tview.DropDown
-				buyerList  *tview.DropDown
-				input      *tview.InputField
-				resetFunc  = func() {
+				ticketList        *tview.DropDown
+				buyerList         *tview.DropDown
+				input             *tview.InputField
+				buyerSelectedFunc = func(text string, index int) {}
+				ticketSelectFunc  = func(text string, index int) {
+					mutex.Lock()
+					defer mutex.Unlock()
+					selectedTicket = tickets[index]
+					var tkgen token.Generator
+					if hotProject {
+						tkgen = token.NewCTokenGenerator()
+					} else {
+						tkgen = token.NewNormalTokenGenerator()
+					}
+					err, tokens := biliClient.GetRequestTokenAndPToken(tkgen, projectID, selectedTicket)
+					if err != nil {
+						logger.Errorf("GetRequestTokenAndPToken error: %v", err)
+						tutils.PopupModal(fmt.Sprintf("Bilibili API Returned An Unexpected Value,\n%s", err), mainPages, map[string]func() bool{
+							"OK": func() bool { return true },
+						}, k)
+						return
+					}
+					err, confirm := biliClient.GetConfirmInformation(tokens, projectID)
+					if err != nil {
+						logger.Errorf("GetConfirmInformation error: %v", err)
+						tutils.PopupModal(fmt.Sprintf("Bilibili API Returned An Unexpected Value,\n%s", err), mainPages, map[string]func() bool{
+							"OK": func() bool { return true },
+						}, k)
+						return
+					}
+					var buyers []string
+					for _, buyer := range confirm.BuyerList.List {
+						buyers = append(buyers, fmt.Sprintf("%s-%s-%s", buyer.Name, buyer.Tel, buyer.PersonalId))
+					}
+					buyerList.SetOptions(buyers, buyerSelectedFunc)
+				}
+				resetFunc = func() {
 					mutex.Lock()
 					defer mutex.Unlock()
 					tickets = *new([]_return.TicketSkuScreenID)
@@ -259,7 +292,6 @@ func main() {
 					}
 					var i []_return.TicketSkuScreenID
 					err, i, hotProject = biliClient.GetTicketSkuIDsByProjectID(input.GetText())
-					tickets = i
 					if err != nil {
 						logger.Errorf("GetTicketSkuIDsByProjectID error: %v", err)
 						tutils.PopupModal(fmt.Sprintf("Bilibili API Returned An Unexpected Value,\n%s", err), mainPages, map[string]func() bool{
@@ -269,49 +301,15 @@ func main() {
 					}
 					ticketList.SetOptions(nil, nil)
 					var options []string
+					var validTickets []_return.TicketSkuScreenID
 					for _, t := range i {
 						if t.Flags.Number == 2 { //t.Flags.Number != 5 && t.Flags.Number != 3 && t.Flags.Number != 4 {
+							validTickets = append(validTickets, t)
 							options = append(options, fmt.Sprintf("%s-%s", t.Name, t.Desc))
 						}
 					}
-					ticketList.SetOptions(options, func(text string, index int) {
-						mutex.Lock()
-						defer mutex.Unlock()
-						for _, t := range tickets {
-							if (fmt.Sprintf("%s-%s", t.Name, t.Desc)) == text {
-								selectedTicket = t
-								break
-							}
-						}
-						//TODO ticket check
-						var tkgen token.Generator
-						if hotProject {
-							tkgen = token.NewCTokenGenerator()
-						} else {
-							tkgen = token.NewNormalTokenGenerator()
-						}
-						err, tokens := biliClient.GetRequestTokenAndPToken(tkgen, projectID, selectedTicket)
-						if err != nil {
-							logger.Errorf("GetRequestTokenAndPToken error: %v", err)
-							tutils.PopupModal(fmt.Sprintf("Bilibili API Returned An Unexpected Value,\n%s", err), mainPages, map[string]func() bool{
-								"OK": func() bool { return true },
-							}, k)
-							return
-						}
-						err, confirm := biliClient.GetConfirmInformation(tokens, projectID)
-						if err != nil {
-							logger.Errorf("GetConfirmInformation error: %v", err)
-							tutils.PopupModal(fmt.Sprintf("Bilibili API Returned An Unexpected Value,\n%s", err), mainPages, map[string]func() bool{
-								"OK": func() bool { return true },
-							}, k)
-							return
-						}
-						var buyers []string
-						for _, buyer := range confirm.BuyerList.List {
-							buyers = append(buyers, fmt.Sprintf("%s-%s-%s", buyer.Name, buyer.Tel, buyer.PersonalId))
-						}
-						buyerList.SetOptions(buyers, nil)
-					})
+					tickets = validTickets
+					ticketList.SetOptions(options, ticketSelectFunc)
 				}
 			)
 			root := tview.NewFlex().SetDirection(tview.FlexRow)
