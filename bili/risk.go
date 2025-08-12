@@ -2,7 +2,7 @@ package bili
 
 import (
 	"bilibili-ticket-go/bili/models/api"
-	"bilibili-ticket-go/utils"
+	"bilibili-ticket-go/utils/hashs"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -205,7 +205,7 @@ func (c *Client) RefreshNewBiliTicket() (error, bool) {
 		}
 	}
 	ts := time.Now().Unix()
-	hexsign := utils.HmacSha256ToHex("XgwSnGZ1p", fmt.Sprintf("ts%d", ts))
+	hexsign := hash.HmacSha256ToHex("XgwSnGZ1p", fmt.Sprintf("ts%d", ts))
 	res, err := c.http.R().SetQueryParams(map[string]string{
 		"key_id":      "ec02",
 		"hexsign":     hexsign,

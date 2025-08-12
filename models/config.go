@@ -1,6 +1,7 @@
 package models
 
 import (
+	"bilibili-ticket-go/bili"
 	"bilibili-ticket-go/models/cookiejar"
 	"errors"
 
@@ -11,7 +12,8 @@ type Bilibili struct {
 	RefreshToken string
 	Cookies      []cookiejar.CookieEntries
 	BUVID        string
-	Fingerprint  string
+	InfocUUID    string
+	Fingerprint  bili.Fingerprint
 }
 type Configuration struct {
 	Bilibili *Bilibili `mapstructure:"bilibili"`

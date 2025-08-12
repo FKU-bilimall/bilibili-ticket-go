@@ -3,6 +3,7 @@ package bili
 import (
 	"bilibili-ticket-go/bili/models/api"
 	"bilibili-ticket-go/global"
+	"bilibili-ticket-go/models/errors"
 	"bilibili-ticket-go/utils"
 	"fmt"
 	"net/http"
@@ -20,23 +21,48 @@ type Client struct {
 	buvid        string
 	refreshToken string
 	appVersion   *api.BiliAppVersionStruct
-	buvidfp      string
-	webglfp      string
-	canvasfp     string
+	infocUUID    string
 	wbi          *wbiKey
+	fingerprint  *Fingerprint
+}
+
+type Fingerprint struct {
+	BuvidLocal string
+	Buvidfp    string
+	Webglfp    string
+	Canvasfp   string
 }
 
 var logger = utils.GetLogger(global.GetLogger(), "bili-client", nil)
 
-func GetNewClient(jar http.CookieJar, buvid string, rt string, fingerprint string) *Client {
+func GetNewClient(jar http.CookieJar, buvid string, rt string, fingerprint Fingerprint, infoc string) *Client {
 	var id = buvid
 	if id == "" {
 		id = utils.GenerateXUBUVID()
 	}
-	var fp = fingerprint
-	if fp == "" {
-		fp = utils.GetFpLocal(id, model, "")
+	if infoc == "" {
+		infoc = utils.GenerateUUIDInfoc()
 	}
+	fp := &Fingerprint{
+		BuvidLocal: utils.GetFpLocal(id, model, ""),
+		Buvidfp:    utils.CalculateFingerprintID(utils.GenerateRandomFingerprint()),
+		Webglfp:    utils.RandomString("0123456789abcdef", 32),
+		Canvasfp:   utils.RandomString("0123456789abcdef", 32),
+	}
+
+	if fingerprint.BuvidLocal != "" {
+		fp.BuvidLocal = fingerprint.BuvidLocal
+	}
+	if fingerprint.Buvidfp != "" {
+		fp.Buvidfp = fingerprint.Buvidfp
+	}
+	if fingerprint.Webglfp != "" {
+		fp.Webglfp = fingerprint.Webglfp
+	}
+	if fingerprint.Canvasfp != "" {
+		fp.Canvasfp = fingerprint.Canvasfp
+	}
+
 	logger.Debugf("Client BUVID: %s", id)
 	c := req.C().EnableDebugLog()
 	err, ver := getAppLatestVersion()
@@ -49,9 +75,8 @@ func GetNewClient(jar http.CookieJar, buvid string, rt string, fingerprint strin
 		cookie:       jar,
 		appVersion:   ver,
 		refreshToken: rt,
-		buvidfp:      fp,
-		webglfp:      utils.RandomString("0123456789abcdef", 32),
-		canvasfp:     utils.RandomString("0123456789abcdef", 32),
+		infocUUID:    infoc,
+		fingerprint:  fp,
 		wbi:          &wbiKey{},
 	}
 	c.SetLogger(logger)
@@ -78,16 +103,20 @@ func GetNewClient(jar http.CookieJar, buvid string, rt string, fingerprint strin
 				)
 				cookies = append(cookies,
 					&http.Cookie{
-						Name:  "Buvid",
+						Name:  "_uuid",
+						Value: biliClient.infocUUID,
+					},
+					&http.Cookie{
+						Name:  "buvid",
 						Value: biliClient.buvid,
 					},
 					&http.Cookie{
-						Name:  "deviceFingerprint",
-						Value: biliClient.buvidfp,
+						Name:  "buvid_fp",
+						Value: biliClient.fingerprint.Buvidfp,
 					},
 					&http.Cookie{
-						Name:  "buvid_fp",
-						Value: biliClient.buvidfp,
+						Name:  "fp_local",
+						Value: biliClient.fingerprint.BuvidLocal,
 					},
 					&http.Cookie{
 						Name:  "kfcFrom",
@@ -107,7 +136,7 @@ func GetNewClient(jar http.CookieJar, buvid string, rt string, fingerprint strin
 					},
 					&http.Cookie{
 						Name:  "feSign",
-						Value: getFeSign(ua, biliClient.canvasfp, biliClient.webglfp),
+						Value: getFeSign(ua, biliClient.fingerprint.Canvasfp, biliClient.fingerprint.Webglfp),
 					},
 					&http.Cookie{
 						Name:  "screenInfo",
@@ -119,9 +148,30 @@ func GetNewClient(jar http.CookieJar, buvid string, rt string, fingerprint strin
 				req.SetHeader("Referer", "https://www.bilibili.com/")
 			}
 			req.SetHeader("User-Agent", ua)
+			req.SetHeader("local_buvid", biliClient.buvid)
+			req.SetHeader("buvid", biliClient.buvid)
+			req.SetHeader("fp_local", biliClient.fingerprint.BuvidLocal)
+			req.SetHeader("fp_remote", biliClient.fingerprint.BuvidLocal)
 			req.SetCookies(cookies...)
 			resp, err = rt.RoundTrip(req)
 			//After
+			voucher := resp.Header.Get("x-bili-gaia-vvoucher")
+			if voucher == "" {
+				if err != nil {
+					return resp, err
+				}
+				var data api.MainApiDataRoot[api.VoucherStruct]
+				err = resp.Unmarshal(&data)
+				if err != nil {
+					return resp, err
+				}
+				if data.Code == -352 && data.Data.Voucher != "" {
+					voucher = data.Data.Voucher
+				}
+			}
+			if voucher != "" {
+				return resp, errors.NewBilibiliAPIVoucherError(voucher)
+			}
 			return resp, err
 		}
 	})
@@ -148,12 +198,16 @@ func (c *Client) GetBUVID() string {
 	return c.buvid
 }
 
-func (c *Client) GetFingerprint() string {
-	return c.buvidfp
+func (c *Client) GetFingerprint() Fingerprint {
+	return *c.fingerprint
 }
 
 func (c *Client) GetRefreshToken() string {
 	return c.refreshToken
+}
+
+func (c *Client) GetInfocUUID() string {
+	return c.infocUUID
 }
 
 func (c *Client) GetQRLoginState(qrcodeKey string) (error, *api.VerifyQRLoginStateStruct) {

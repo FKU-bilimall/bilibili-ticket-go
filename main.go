@@ -6,10 +6,10 @@ import (
 	_return "bilibili-ticket-go/bili/models/return"
 	"bilibili-ticket-go/bili/token"
 	"bilibili-ticket-go/global"
-	"bilibili-ticket-go/keyboard"
 	"bilibili-ticket-go/models"
 	"bilibili-ticket-go/models/cookiejar"
 	"bilibili-ticket-go/models/hooks"
+	"bilibili-ticket-go/tui/keyboard"
 	"bilibili-ticket-go/tui/primitives"
 	tutils "bilibili-ticket-go/tui/utils"
 	"bilibili-ticket-go/utils"
@@ -70,9 +70,10 @@ func init() {
 		PublicSuffixList: nil,
 		DefaultCookies:   conf.Bilibili.Cookies,
 	})
-	biliClient = client.GetNewClient(jar, conf.Bilibili.BUVID, conf.Bilibili.RefreshToken, conf.Bilibili.Fingerprint)
+	biliClient = client.GetNewClient(jar, conf.Bilibili.BUVID, conf.Bilibili.RefreshToken, conf.Bilibili.Fingerprint, conf.Bilibili.InfocUUID)
 	conf.Bilibili.BUVID = biliClient.GetBUVID()
 	conf.Bilibili.Fingerprint = biliClient.GetFingerprint()
+	conf.Bilibili.InfocUUID = biliClient.GetInfocUUID()
 }
 
 func main() {
@@ -127,6 +128,7 @@ func main() {
 			err, stat := biliClient.GetLoginStatus()
 			if err != nil {
 				logrus.Errorf("GetLoginStatus error: %v", err)
+				return
 			}
 			if stat.Login {
 				t.Write([]byte(fmt.Sprintf("Welcome %s, Your UID is %d", stat.Name, stat.UID)))

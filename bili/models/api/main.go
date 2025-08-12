@@ -52,7 +52,7 @@ type RefreshTokenStruct struct {
 
 type BiliTicketStruct struct {
 	Ticket  string `json:"ticket"`
-	Created int    `json:"create_at"`
+	Created int64  `json:"create_at"`
 	TTL     int    `json:"ttl"`
 }
 
@@ -71,8 +71,8 @@ type WbiStruct struct {
 type TicketProjectInformationStruct struct {
 	Id         int    `json:"id"`
 	Name       string `json:"name"`
-	SaleBegin  int64  `json:"sale_begin"`
-	SaleEnd    int64  `json:"sale_end"`
+	Start      int64  `json:"start_time"`
+	End        int64  `json:"end_time"`
 	HotProject bool   `json:"hotProject"`
 	ScreenList []struct {
 		SaleFlag struct {
@@ -101,4 +101,8 @@ type TicketProjectInformationStruct struct {
 			ScreenName string `json:"screen_name"`
 		} `json:"ticket_list"`
 	} `json:"screen_list"`
+}
+
+type VoucherStruct struct {
+	Voucher string `json:"v_voucher"`
 }

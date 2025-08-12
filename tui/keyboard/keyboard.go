@@ -217,7 +217,7 @@ func flattenItems(obj tview.Primitive) []tview.Primitive {
 
 func selectable(obj tview.Primitive) bool {
 	switch obj.(type) {
-	case *tview.List, *tview.Flex, *tview.Grid, *tview.Button, *primitives.Pages, *tview.InputField:
+	case *tview.List, *tview.Flex, *tview.Grid, *tview.Button, *primitives.Pages, *tview.InputField, *tview.DropDown:
 		return true
 	default:
 		return false
@@ -249,6 +249,9 @@ func setColor(primitive tview.Primitive, color tcell.Color) tcell.Color {
 		_, c, _ = obj.GetFieldStyle().Decompose()
 		obj.SetFieldBackgroundColor(color)
 		obj.SetPlaceholderStyle(obj.GetFieldStyle().Background(color))
+	case *tview.DropDown:
+		c = obj.GetBackgroundColor()
+		obj.SetBackgroundColor(color)
 	}
 	return c
 }

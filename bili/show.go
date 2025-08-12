@@ -12,6 +12,22 @@ import (
 
 const frontVersion = "134" // Stored on "https://s1.hdslb.com/bfs/static/platform/static/js/vendor.4052c4899bf31668a61b.js?277f136a95f6bbe03034" -> var version = "134";
 
+func (c *Client) GetProjectStartAndEndTime(projectID string) (error, time.Time, time.Time) {
+	res, err := c.http.R().Get(fmt.Sprintf("https://show.bilibili.com/api/ticket/project/getV2?version=%s&id=%s&project_id=%s&requestSource=pc-new", frontVersion, projectID, projectID))
+	if err != nil {
+		return err, time.Unix(0, 0), time.Unix(0, 0)
+	}
+	var data api.MainApiDataRoot[api.TicketProjectInformationStruct]
+	err = res.Unmarshal(&data)
+	if err != nil {
+		return err, time.Unix(0, 0), time.Unix(0, 0)
+	}
+	if err = data.CheckValid(); err != nil {
+		return err, time.Unix(0, 0), time.Unix(0, 0)
+	}
+	return nil, time.Unix(data.Data.End, 0), time.Unix(data.Data.Start, 0)
+}
+
 func (c *Client) GetTicketSkuIDsByProjectID(projectID string) (error, []r.TicketSkuScreenID, bool) {
 	res, err := c.http.R().Get(fmt.Sprintf("https://show.bilibili.com/api/ticket/project/getV2?version=%s&id=%s&project_id=%s&requestSource=pc-new", frontVersion, projectID, projectID))
 	if err != nil {
@@ -45,8 +61,8 @@ func (c *Client) GetTicketSkuIDsByProjectID(projectID string) (error, []r.Ticket
 					Start time.Time
 					End   time.Time
 				}{
-					Start: time.Unix(int64(t.SaleStart), 0),
-					End:   time.Unix(int64(t.SaleEnd), 0),
+					Start: time.Unix(t.SaleStart, 0),
+					End:   time.Unix(t.SaleEnd, 0),
 				},
 			}
 			tickets = append(tickets, ticket)
@@ -122,7 +138,7 @@ func (c *Client) SubmitOrder(tk token.Generator, whenGenPToken time.Time, tokens
 		"pay_money":     strconv.Itoa(ticket.Price),
 		"order_type":    "1",
 		"timestamp":     strconv.FormatInt(whenGenPToken.Unix(), 10),
-		"deviceId":      c.buvidfp,
+		"deviceId":      c.fingerprint.Buvidfp,
 		"buyer_info":    string(bs),
 		"click_postion": fmt.Sprintf("{\"x\":948,\"y\":997,\"origin\":%d,\"now\":%d}", whenGenPToken, time.Now().Unix()),
 		"sku_id":        strconv.Itoa(ticket.SkuID),

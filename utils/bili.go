@@ -1,18 +1,15 @@
 package utils
 
 import (
-	"crypto/hmac"
 	"crypto/md5"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"math/rand"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 )
 
+// Deprecated: Use GenerateXUBUVID instead.
 func GenerateXYBUVID() string {
 	var ID = strings.ReplaceAll(generateRandomMAC(), ":", "")
 	var IDMD5 = fmt.Sprintf("%x", md5.Sum([]byte(ID)))
@@ -33,30 +30,11 @@ func GenerateXUBUVID() string {
 	return strings.ToUpper("XU" + IDe + IDMD5)
 }
 
-func generateRandomMAC() string {
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	mac := make([]byte, 6)
-	r.Read(mac)
-	mac[0] = (mac[0] | 2) & 0xfe
-	return fmt.Sprintf("%02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5])
-}
-
 func GenerateRandomDRMID(length int) []byte {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	buf := make([]byte, length)
 	r.Read(buf)
 	return buf
-}
-
-func HmacSha256(key string, data string) []byte {
-	mac := hmac.New(sha256.New, []byte(key))
-	_, _ = mac.Write([]byte(data))
-
-	return mac.Sum(nil)
-}
-
-func HmacSha256ToHex(key string, data string) string {
-	return hex.EncodeToString(HmacSha256(key, data))
 }
 
 func GetFpLocal(BUVID string, model string, firmwareVersion string) string {
@@ -95,24 +73,15 @@ func calculateFpFinal(fpRaw string) string {
 	return fmt.Sprintf("%02x", veriCode)
 }
 
-func RandomString(charset string, length int) string {
-	var output strings.Builder
-	for i := 0; i < length; i++ {
-		output.WriteByte(charset[rand.Intn(len(charset))])
-	}
-	return output.String()
+var InfocDigitMap = []string{
+	"1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F", "10",
 }
 
-func GetFileNameWithoutExt(path string) string {
-	filename := filepath.Base(path)
-	nameWithoutExt := strings.TrimSuffix(filename, filepath.Ext(filename))
-	return nameWithoutExt
-}
-
-func IsNextDayInCST(from time.Time, target time.Time) bool {
-	loc, _ := time.LoadLocation("Asia/Shanghai")
-	now := from.In(loc)
-	afterHour := target.In(loc)
-
-	return now.Format("20060102") != afterHour.Format("20060102")
+func GenerateUUIDInfoc() string {
+	t := time.Now().UnixMilli() % 100000
+	return strings.Join([]string{
+		randomChoice([]int{8, 4, 4, 4, 12}, "-", InfocDigitMap),
+		fmt.Sprintf("%05d", t),
+		"infoc",
+	}, "")
 }

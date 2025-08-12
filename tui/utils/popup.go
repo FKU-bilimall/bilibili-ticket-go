@@ -1,7 +1,7 @@
 package utils
 
 import (
-	"bilibili-ticket-go/keyboard"
+	"bilibili-ticket-go/tui/keyboard"
 	"bilibili-ticket-go/tui/primitives"
 
 	"github.com/rivo/tview"

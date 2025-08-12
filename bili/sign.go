@@ -3,6 +3,7 @@ package bili
 import (
 	"bilibili-ticket-go/bili/models/api"
 	"bilibili-ticket-go/utils"
+	"bilibili-ticket-go/utils/hashs"
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
@@ -94,6 +95,6 @@ func (c *Client) identifyCookieSign() http.Cookie {
 }
 
 func getFeSign(ua string, canvasFp string, webglFp string) string {
-	h1, h2 := utils.MurmurX64Hash128(fmt.Sprintf("%s~%s~%s~%s", canvasFp, webglFp, screenInfo, ua), 31)
+	h1, h2 := hash.MurmurX64Hash128(fmt.Sprintf("%s~%s~%s~%s", canvasFp, webglFp, screenInfo, ua), 31)
 	return fmt.Sprintf("%016x%016x", h1, h2)
 }
