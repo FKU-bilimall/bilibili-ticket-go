@@ -14,20 +14,25 @@ type ShowApiDataRoot[T any] struct {
 	Data      T      `json:"data"`
 }
 
+func (r *ShowApiDataRoot[T]) GetCode() int {
+	if r.ErrNumber != 0 {
+		return r.ErrNumber
+	} else {
+		return r.Code
+	}
+}
+
+func (r *ShowApiDataRoot[T]) GetMessage() string {
+	if r.ErrNumber != 0 {
+		return r.Msg
+	} else {
+		return r.Message
+	}
+}
+
 func (r *ShowApiDataRoot[T]) CheckValid() error {
 	if r.ErrNumber != 0 || r.Code != 0 {
-		var (
-			c int
-			m string
-		)
-		if r.ErrNumber != 0 {
-			c = r.ErrNumber
-			m = r.Msg
-		} else {
-			c = r.Code
-			m = r.Message
-		}
-		return errors.NewBilibiliAPIError(c, m)
+		return errors.NewBilibiliAPIError(r.GetCode(), r.GetMessage())
 	}
 	return nil
 }
@@ -77,8 +82,8 @@ type ConfirmStruct struct {
 }
 
 type BuyerStruct struct {
-	Id                  int         `json:"id"`
-	Uid                 int         `json:"uid"`
+	Id                  int64       `json:"id"`
+	Uid                 int64       `json:"uid"`
 	AccountId           int         `json:"accountId"`
 	Name                string      `json:"name"`
 	Buyer               interface{} `json:"buyer"`

@@ -3,6 +3,7 @@ package main
 import (
 	client "bilibili-ticket-go/bili"
 	"bilibili-ticket-go/bili/clock"
+	"bilibili-ticket-go/bili/models/api"
 	_return "bilibili-ticket-go/bili/models/return"
 	"bilibili-ticket-go/bili/token"
 	"bilibili-ticket-go/global"
@@ -238,14 +239,18 @@ func main() {
 				mutex          = sync.Mutex{} // Mutex to protect shared data
 				projectID      string
 				hotProject     bool
+				buyers         []api.BuyerStruct
+				targetbuyer    api.BuyerStruct
 				//ticketGen      token.Generator
 			)
 			var (
 				ticketList        *tview.DropDown
 				buyerList         *tview.DropDown
 				input             *tview.InputField
-				buyerSelectedFunc = func(text string, index int) {}
-				ticketSelectFunc  = func(text string, index int) {
+				buyerSelectedFunc = func(text string, index int) {
+					targetbuyer = buyers[index]
+				}
+				ticketSelectFunc = func(text string, index int) {
 					mutex.Lock()
 					defer mutex.Unlock()
 					selectedTicket = tickets[index]
@@ -271,15 +276,19 @@ func main() {
 						}, k)
 						return
 					}
-					var buyers []string
-					for _, buyer := range confirm.BuyerList.List {
-						buyers = append(buyers, fmt.Sprintf("%s-%s-%s", buyer.Name, buyer.Tel, buyer.PersonalId))
+					buyers = confirm.BuyerList.List
+					var buyerOptions []string
+					for _, buyer := range buyers {
+						buyerOptions = append(buyerOptions, fmt.Sprintf("%s-%s-%s", buyer.Name, buyer.Tel, buyer.PersonalId))
 					}
-					buyerList.SetOptions(buyers, buyerSelectedFunc)
+					buyerList.SetOptions(buyerOptions, buyerSelectedFunc)
 				}
 				resetFunc = func() {
 					mutex.Lock()
 					defer mutex.Unlock()
+					if projectID == input.GetText() && projectID != "" {
+						return
+					}
 					tickets = *new([]_return.TicketSkuScreenID)
 					selectedTicket = *new(_return.TicketSkuScreenID)
 					ticketList.SetOptions([]string{"Nothing"}, nil)
@@ -293,7 +302,20 @@ func main() {
 						return
 					}
 					var i []_return.TicketSkuScreenID
-					err, i, hotProject = biliClient.GetTicketSkuIDsByProjectID(input.GetText())
+					if projectID == input.GetText() && projectID != "" {
+						return
+					}
+					projectID = input.GetText()
+					err, projectIDInfo := biliClient.GetProjectInformation(input.GetText())
+					if err != nil {
+						logger.Errorf("GetProjectInformation error: %v", err)
+						tutils.PopupModal(fmt.Sprintf("Bilibili API Returned An Unexpected Value,\n%s", err), mainPages, map[string]func() bool{
+							"OK": func() bool { return true },
+						}, k)
+						return
+					}
+					hotProject = projectIDInfo.IsHotProject
+					err, i = biliClient.GetTicketSkuIDsByProjectID(input.GetText())
 					if err != nil {
 						logger.Errorf("GetTicketSkuIDsByProjectID error: %v", err)
 						tutils.PopupModal(fmt.Sprintf("Bilibili API Returned An Unexpected Value,\n%s", err), mainPages, map[string]func() bool{
@@ -311,6 +333,13 @@ func main() {
 						}
 					}
 					tickets = validTickets
+					if len(validTickets) == 0 {
+						logger.Errorf("No valid tickets found")
+						tutils.PopupModal("No valid tickets found", mainPages, map[string]func() bool{
+							"OK": func() bool { return true },
+						}, k)
+						return
+					}
 					ticketList.SetOptions(options, ticketSelectFunc)
 				}
 			)
@@ -333,7 +362,6 @@ func main() {
 				SetPlaceholder("Enter Project ID").
 				SetChangedFunc(func(text string) {
 					resetFunc()
-					projectID = text
 				})
 			input.SetDoneFunc(func(key tcell.Key) { refreshFunc() })
 			root.AddItem(tview.NewFlex().
@@ -346,6 +374,8 @@ func main() {
 			root.AddItem(ticketList, 1, 0, false)
 			root.AddItem(tview.NewBox(), 1, 0, false)
 			root.AddItem(buyerList, 1, 0, false)
+			root.AddItem(tview.NewBox(), 1, 0, false)
+			root.AddItem(tview.NewButton(" Test "), 3, 0, false)
 			functionPages.AddPage("ticket", root, true, false)
 		}
 	}

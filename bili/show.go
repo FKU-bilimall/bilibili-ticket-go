@@ -12,34 +12,51 @@ import (
 
 const frontVersion = "134" // Stored on "https://s1.hdslb.com/bfs/static/platform/static/js/vendor.4052c4899bf31668a61b.js?277f136a95f6bbe03034" -> var version = "134";
 
-func (c *Client) GetProjectStartAndEndTime(projectID string) (error, time.Time, time.Time) {
+func (c *Client) GetProjectInformation(projectID string) (error, *r.ProjectInformation) {
 	res, err := c.http.R().Get(fmt.Sprintf("https://show.bilibili.com/api/ticket/project/getV2?version=%s&id=%s&project_id=%s&requestSource=pc-new", frontVersion, projectID, projectID))
 	if err != nil {
-		return err, time.Unix(0, 0), time.Unix(0, 0)
+		return err, &r.ProjectInformation{
+			ProjectID: projectID,
+			StartTime: time.Time{},
+			EndTime:   time.Time{},
+		}
 	}
 	var data api.MainApiDataRoot[api.TicketProjectInformationStruct]
 	err = res.Unmarshal(&data)
 	if err != nil {
-		return err, time.Unix(0, 0), time.Unix(0, 0)
+		return err, &r.ProjectInformation{
+			ProjectID: projectID,
+			StartTime: time.Time{},
+			EndTime:   time.Time{},
+		}
 	}
 	if err = data.CheckValid(); err != nil {
-		return err, time.Unix(0, 0), time.Unix(0, 0)
+		return err, &r.ProjectInformation{
+			ProjectID: projectID,
+			StartTime: time.Time{},
+			EndTime:   time.Time{},
+		}
 	}
-	return nil, time.Unix(data.Data.End, 0), time.Unix(data.Data.Start, 0)
+	return nil, &r.ProjectInformation{
+		ProjectID:    projectID,
+		StartTime:    time.Unix(data.Data.End, 0),
+		EndTime:      time.Unix(data.Data.Start, 0),
+		IsHotProject: data.Data.HotProject,
+	}
 }
 
-func (c *Client) GetTicketSkuIDsByProjectID(projectID string) (error, []r.TicketSkuScreenID, bool) {
+func (c *Client) GetTicketSkuIDsByProjectID(projectID string) (error, []r.TicketSkuScreenID) {
 	res, err := c.http.R().Get(fmt.Sprintf("https://show.bilibili.com/api/ticket/project/getV2?version=%s&id=%s&project_id=%s&requestSource=pc-new", frontVersion, projectID, projectID))
 	if err != nil {
-		return err, nil, false
+		return err, nil
 	}
 	var data api.MainApiDataRoot[api.TicketProjectInformationStruct]
 	err = res.Unmarshal(&data)
 	if err != nil {
-		return err, nil, false
+		return err, nil
 	}
 	if err = data.CheckValid(); err != nil {
-		return err, nil, false
+		return err, nil
 	}
 	tickets := make([]r.TicketSkuScreenID, 0)
 	for _, s := range data.Data.ScreenList {
@@ -68,7 +85,7 @@ func (c *Client) GetTicketSkuIDsByProjectID(projectID string) (error, []r.Ticket
 			tickets = append(tickets, ticket)
 		}
 	}
-	return nil, tickets, data.Data.HotProject
+	return nil, tickets
 }
 
 func (c *Client) GetRequestTokenAndPToken(tk token.Generator, projectID string, ticket r.TicketSkuScreenID) (error, *r.RequestTokenAndPToken) {
@@ -126,14 +143,14 @@ func (c *Client) GetConfirmInformation(tokens *r.RequestTokenAndPToken, projectI
 	return nil, &data.Data
 }
 
-func (c *Client) SubmitOrder(tk token.Generator, whenGenPToken time.Time, tokens *r.RequestTokenAndPToken, projectID string, ticket r.TicketSkuScreenID, buyer *api.BuyerStruct) (error, int, *api.TicketOrderStruct) {
-	bs, err := json.Marshal([1]*api.BuyerStruct{buyer})
+func (c *Client) SubmitOrder(tk token.Generator, whenGenPToken time.Time, tokens *r.RequestTokenAndPToken, projectID string, ticket r.TicketSkuScreenID, buyer api.BuyerStruct) (error, int, string, *api.TicketOrderStruct) {
+	bs, err := json.Marshal([1]api.BuyerStruct{buyer})
 	if err != nil {
-		return err, -1, nil
+		return err, -1, "", nil
 	}
 	form := map[string]string{
 		"project_id":    projectID,
-		"screen_id":     strconv.Itoa(ticket.ScreenID),
+		"screen_id":     strconv.FormatInt(ticket.ScreenID, 10),
 		"count":         "1",
 		"pay_money":     strconv.Itoa(ticket.Price),
 		"order_type":    "1",
@@ -141,7 +158,7 @@ func (c *Client) SubmitOrder(tk token.Generator, whenGenPToken time.Time, tokens
 		"deviceId":      c.fingerprint.Buvidfp,
 		"buyer_info":    string(bs),
 		"click_postion": fmt.Sprintf("{\"x\":948,\"y\":997,\"origin\":%d,\"now\":%d}", whenGenPToken, time.Now().Unix()),
-		"sku_id":        strconv.Itoa(ticket.SkuID),
+		"sku_id":        strconv.FormatInt(ticket.SkuID, 10),
 		"requestSource": "pc-new",
 	}
 	if tk.IsHotProject() {
@@ -152,10 +169,10 @@ func (c *Client) SubmitOrder(tk token.Generator, whenGenPToken time.Time, tokens
 		form["orderCreateUrl"] = "https://show.bilibili.com/api/ticket/order/createV2"
 	}
 	req, err := c.http.R().SetFormData(form).Post("https://show.bilibili.com/api/ticket/order/createV2?project_id=" + projectID)
-	var data api.ShowApiDataRoot[api.TicketOrderStruct]
+	var data api.ShowApiDataRoot[*api.TicketOrderStruct]
 	err = req.Unmarshal(&data)
 	if err != nil {
-		return err, -1, nil
+		return err, -1, "", nil
 	}
-	return nil, data.ErrNumber, &data.Data
+	return nil, data.GetCode(), data.GetMessage(), data.Data
 }

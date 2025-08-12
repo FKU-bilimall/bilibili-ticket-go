@@ -13,7 +13,7 @@ type CTokenGenerator struct {
 
 func NewCTokenGenerator() *CTokenGenerator {
 	return &CTokenGenerator{
-		begin: time.Now(),
+		begin: time.Now().Add(-2 * time.Second),
 	}
 }
 

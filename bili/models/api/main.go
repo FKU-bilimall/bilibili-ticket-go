@@ -79,8 +79,8 @@ type TicketProjectInformationStruct struct {
 			Number      int    `json:"number"`
 			DisplayName string `json:"display_name"`
 		} `json:"saleFlag"`
-		ScreenId     int    `json:"id"`
-		StartTime    int    `json:"start_time"`
+		ScreenId     int64  `json:"id"`
+		StartTime    int64  `json:"start_time"`
 		Name         string `json:"name"`
 		Type         int    `json:"type"`
 		TicketType   int    `json:"ticket_type"`
@@ -93,7 +93,7 @@ type TicketProjectInformationStruct struct {
 			SaleStart int64  `json:"saleStart"`
 			SaleEnd   int64  `json:"saleEnd"`
 			IsSale    int    `json:"is_sale"`
-			SkuId     int    `json:"id"`
+			SkuId     int64  `json:"id"`
 			SaleFlag  struct {
 				Number      int    `json:"number"`
 				DisplayName string `json:"display_name"`

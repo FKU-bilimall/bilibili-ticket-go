@@ -49,7 +49,6 @@ func GetNewClient(jar http.CookieJar, buvid string, rt string, fingerprint Finge
 		Webglfp:    utils.RandomString("0123456789abcdef", 32),
 		Canvasfp:   utils.RandomString("0123456789abcdef", 32),
 	}
-
 	if fingerprint.BuvidLocal != "" {
 		fp.BuvidLocal = fingerprint.BuvidLocal
 	}
@@ -163,7 +162,7 @@ func GetNewClient(jar http.CookieJar, buvid string, rt string, fingerprint Finge
 				var data api.MainApiDataRoot[api.VoucherStruct]
 				err = resp.Unmarshal(&data)
 				if err != nil {
-					return resp, err
+					return resp, nil
 				}
 				if data.Code == -352 && data.Data.Voucher != "" {
 					voucher = data.Data.Voucher

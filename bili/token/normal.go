@@ -1,23 +1,21 @@
 package token
 
-import (
-	"time"
-)
+import "time"
 
-type NormalToken struct{}
+type NormalTokenGenerator struct{}
 
-func NewNormalTokenGenerator() *NormalToken {
-	return &NormalToken{}
+func NewNormalTokenGenerator() *NormalTokenGenerator {
+	return &NormalTokenGenerator{}
 }
 
-func (g *NormalToken) GenerateTokenPrepareStage() string {
+func (g *NormalTokenGenerator) GenerateTokenPrepareStage() string {
 	return ""
 }
 
-func (g *NormalToken) GenerateTokenCreateStage(whenGenPToken time.Time) string {
+func (g *NormalTokenGenerator) GenerateTokenCreateStage(_ time.Time) string {
 	return ""
 }
 
-func (g *NormalToken) IsHotProject() bool {
+func (g *NormalTokenGenerator) IsHotProject() bool {
 	return true
 }
