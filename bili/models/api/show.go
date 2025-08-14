@@ -101,8 +101,8 @@ type BuyerStruct struct {
 }
 
 type TicketOrderStruct struct {
-	OrderId         int64  `json:"order_id"`
-	OrderCreateTime int64  `json:"order_create_time"`
+	OrderId         int64  `json:"orderId"`
+	OrderCreateTime int64  `json:"orderCreateTime"`
 	Token           string `json:"token"`
 	PayMoney        int    `json:"pay_money"`
 }

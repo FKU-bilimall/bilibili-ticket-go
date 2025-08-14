@@ -16,7 +16,7 @@ import (
 
 type TicketRoutine struct {
 	mutex     sync.Mutex
-	client    client.Client
+	client    *client.Client
 	buyerID   int64
 	ProjectID int64
 	skuID     int64
@@ -26,7 +26,7 @@ type TicketRoutine struct {
 	cancel    context.CancelFunc
 }
 
-func NewTicketRoutine(client client.Client, buyerID int64, ProjectID int64, skuID int64, screenID int64) *TicketRoutine {
+func NewTicketRoutine(client *client.Client, buyerID int64, ProjectID int64, skuID int64, screenID int64) *TicketRoutine {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &TicketRoutine{
 		client:    client,
@@ -49,9 +49,6 @@ func (tr *TicketRoutine) Start() {
 	}
 
 	tr.isRunning = true
-	tr.cancel = func() {
-		tr.isRunning = false
-	}
 	go run(tr.client, tr.buyerID, tr.ProjectID, tr.skuID, tr.screenID, 500*time.Millisecond, tr.ctx)
 }
 
@@ -67,7 +64,7 @@ func (tr *TicketRoutine) Stop() {
 	tr.isRunning = false
 }
 
-func run(client client.Client, buyerID int64, projectID int64, skuID int64, screenID int64, interval time.Duration, ctx context.Context) {
+func run(client *client.Client, buyerID int64, projectID int64, skuID int64, screenID int64, interval time.Duration, ctx context.Context) {
 	logger := utils.GetLogger(global.GetLogger(), fmt.Sprintf("%d-%d-%d", projectID, skuID, buyerID), nil)
 	err, info := client.GetProjectInformation(strconv.FormatInt(projectID, 10))
 	if err != nil {
@@ -109,6 +106,12 @@ func run(client client.Client, buyerID int64, projectID int64, skuID int64, scre
 		case <-ctx.Done():
 			return
 		default:
+			var (
+				err  error
+				code int
+				msg  string
+				to   api.TicketOrderStruct
+			)
 			if count >= 61 {
 				// 该换个新token去骗叔叔了
 				whenGenPtoken = time.Now()
@@ -118,7 +121,7 @@ func run(client client.Client, buyerID int64, projectID int64, skuID int64, scre
 				}
 				goto SLEEP
 			}
-			if buyer != nil {
+			if buyer == nil {
 				err, confirm := client.GetConfirmInformation(tk, strconv.FormatInt(projectID, 10))
 				if err != nil {
 					logger.Errorf("GetConfirmInformation err: %v", err)
@@ -134,21 +137,12 @@ func run(client client.Client, buyerID int64, projectID int64, skuID int64, scre
 					return
 				}
 			}
-			err, code, msg, to := client.SubmitOrder(tokenGen, whenGenPtoken, tk, strconv.FormatInt(projectID, 10), *ticket, *buyer)
+			err, code, msg, to = client.SubmitOrder(tokenGen, whenGenPtoken, tk, strconv.FormatInt(projectID, 10), *ticket, *buyer)
 			if err != nil {
 				logger.Errorf("SubmitOrder err: %v", err)
 				goto SLEEP
 			}
-			if to == nil {
-				// 被做局了
-				whenGenPtoken = time.Now()
-				err, tk = client.GetRequestTokenAndPToken(tokenGen, strconv.FormatInt(projectID, 10), *ticket)
-				if err != nil {
-					logger.Errorf("GetRequestTokenAndPToken err: %v", err)
-				}
-				goto SLEEP
-			}
-			if code == 0 || code == 100048 || code == 100079 {
+			if (code == 0 || code == 100048 || code == 100079) && (to.OrderId != 0 && to.OrderCreateTime != 0) {
 				// 肘击成功
 				logger.Infof("SubmitOrder success, orderID: %d", to.OrderId)
 				return

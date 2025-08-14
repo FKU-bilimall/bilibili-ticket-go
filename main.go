@@ -5,6 +5,7 @@ import (
 	"bilibili-ticket-go/bili/clock"
 	"bilibili-ticket-go/bili/models/api"
 	_return "bilibili-ticket-go/bili/models/return"
+	"bilibili-ticket-go/bili/ticket"
 	"bilibili-ticket-go/bili/token"
 	"bilibili-ticket-go/global"
 	"bilibili-ticket-go/models"
@@ -240,15 +241,16 @@ func main() {
 				projectID      string
 				hotProject     bool
 				buyers         []api.BuyerStruct
-				targetbuyer    api.BuyerStruct
+				targetBuyer    api.BuyerStruct
 				//ticketGen      token.Generator
 			)
+			_ = targetBuyer
 			var (
 				ticketList        *tview.DropDown
 				buyerList         *tview.DropDown
 				input             *tview.InputField
 				buyerSelectedFunc = func(text string, index int) {
-					targetbuyer = buyers[index]
+					targetBuyer = buyers[index]
 				}
 				ticketSelectFunc = func(text string, index int) {
 					mutex.Lock()
@@ -327,7 +329,7 @@ func main() {
 					var options []string
 					var validTickets []_return.TicketSkuScreenID
 					for _, t := range i {
-						if t.Flags.Number == 2 { //t.Flags.Number != 5 && t.Flags.Number != 3 && t.Flags.Number != 4 {
+						if utils.IsTicketOnSale(t.Flags.Number) { //t.Flags.Number != 5 && t.Flags.Number != 3 && t.Flags.Number != 4 {
 							validTickets = append(validTickets, t)
 							options = append(options, fmt.Sprintf("%s-%s", t.Name, t.Desc))
 						}
@@ -341,6 +343,20 @@ func main() {
 						return
 					}
 					ticketList.SetOptions(options, ticketSelectFunc)
+				}
+				startTestFunc = func() {
+					mutex.Lock()
+					defer mutex.Unlock()
+					pid, err := strconv.ParseInt(projectID, 10, 64)
+					if err != nil {
+						return
+					}
+					r := ticket.NewTicketRoutine(biliClient, targetBuyer.Id, pid, selectedTicket.SkuID, selectedTicket.ScreenID)
+					r.Start()
+					go func() {
+						time.Sleep(5 * time.Second)
+						r.Stop()
+					}()
 				}
 			)
 			root := tview.NewFlex().SetDirection(tview.FlexRow)
@@ -375,7 +391,7 @@ func main() {
 			root.AddItem(tview.NewBox(), 1, 0, false)
 			root.AddItem(buyerList, 1, 0, false)
 			root.AddItem(tview.NewBox(), 1, 0, false)
-			root.AddItem(tview.NewButton(" Test "), 3, 0, false)
+			root.AddItem(tview.NewButton(" Test ").SetSelectedFunc(startTestFunc), 1, 0, false)
 			functionPages.AddPage("ticket", root, true, false)
 		}
 	}

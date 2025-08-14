@@ -5,7 +5,7 @@ bilibili-ticket-go*
 __debug_bin*
 test.go
 ##Generate Files
-/config.json
+/config*.json
 /dist
 /logs
 

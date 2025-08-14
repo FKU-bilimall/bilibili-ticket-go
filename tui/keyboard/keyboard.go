@@ -216,9 +216,11 @@ func flattenItems(obj tview.Primitive) []tview.Primitive {
 }
 
 func selectable(obj tview.Primitive) bool {
-	switch obj.(type) {
-	case *tview.List, *tview.Flex, *tview.Grid, *tview.Button, *primitives.Pages, *tview.InputField, *tview.DropDown:
+	switch o := obj.(type) {
+	case *tview.List, *tview.Flex, *tview.Grid, *primitives.Pages, *tview.InputField, *tview.DropDown:
 		return true
+	case *tview.Button:
+		return !o.IsDisabled()
 	default:
 		return false
 	}

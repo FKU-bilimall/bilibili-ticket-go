@@ -143,10 +143,10 @@ func (c *Client) GetConfirmInformation(tokens *r.RequestTokenAndPToken, projectI
 	return nil, &data.Data
 }
 
-func (c *Client) SubmitOrder(tk token.Generator, whenGenPToken time.Time, tokens *r.RequestTokenAndPToken, projectID string, ticket r.TicketSkuScreenID, buyer api.BuyerStruct) (error, int, string, *api.TicketOrderStruct) {
+func (c *Client) SubmitOrder(tk token.Generator, whenGenPToken time.Time, tokens *r.RequestTokenAndPToken, projectID string, ticket r.TicketSkuScreenID, buyer api.BuyerStruct) (error, int, string, api.TicketOrderStruct) {
 	bs, err := json.Marshal([1]api.BuyerStruct{buyer})
 	if err != nil {
-		return err, -1, "", nil
+		return err, -1, "", api.TicketOrderStruct{}
 	}
 	form := map[string]string{
 		"project_id":    projectID,
@@ -168,11 +168,22 @@ func (c *Client) SubmitOrder(tk token.Generator, whenGenPToken time.Time, tokens
 		form["token"] = tokens.RequestToken
 		form["orderCreateUrl"] = "https://show.bilibili.com/api/ticket/order/createV2"
 	}
-	req, err := c.http.R().SetFormData(form).Post("https://show.bilibili.com/api/ticket/order/createV2?project_id=" + projectID)
-	var data api.ShowApiDataRoot[*api.TicketOrderStruct]
+	req, err := c.http.R().SetBodyJsonMarshal(form).Post("https://show.bilibili.com/api/ticket/order/createV2?project_id=" + projectID)
+	var data = api.ShowApiDataRoot[api.TicketOrderStruct]{
+		ErrNumber: 0,
+		ErrTag:    0,
+		Code:      0,
+		Message:   "",
+		Data: api.TicketOrderStruct{
+			OrderId:         0,
+			OrderCreateTime: 0,
+			Token:           "",
+			PayMoney:        -1,
+		},
+	}
 	err = req.Unmarshal(&data)
 	if err != nil {
-		return err, -1, "", nil
+		return err, -1, "", api.TicketOrderStruct{}
 	}
 	return nil, data.GetCode(), data.GetMessage(), data.Data
 }

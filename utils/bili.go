@@ -85,3 +85,22 @@ func GenerateUUIDInfoc() string {
 		"infoc",
 	}, "")
 }
+
+func IsTicketOnSale(flag int) bool {
+	switch flag {
+	case 2:
+		// 预售中
+		return true
+	case 3:
+		// 已停售
+		return false
+	case 4:
+		// 已售罄
+		return true
+	case 5:
+		// 不可售
+		return false
+	default:
+		return false
+	}
+}

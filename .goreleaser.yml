@@ -1,10 +1,6 @@
 version: 2
 project_name: bilibili-ticket-go
 
-before:
-  hooks:
-    - go mod tidy
-
 builds:
   - id: bilibili-ticket-go-obf
     main: main.go
@@ -22,7 +18,10 @@ builds:
     binary: bilibili-ticket-go-obf
     command: "-literals -tiny"
     flags: [ "build" ]
-
+    hooks:
+      pre:
+        - go mod tidy
+        - go install mvdan.cc/garble@latest
 archives:
   - formats: zip
     name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}_obf"
