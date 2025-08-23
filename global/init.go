@@ -2,6 +2,7 @@ package global
 
 import (
 	"bilibili-ticket-go/utils"
+	"strconv"
 
 	"github.com/sirupsen/logrus"
 )
@@ -11,8 +12,14 @@ var loggers = map[string]*logrus.Logger{
 }
 
 func init() {
+	level, err := strconv.Atoi(LoggerLevel)
+	if err != nil {
+		level = 4
+	}
+	for _, logger := range loggers {
+		logger.SetLevel(logrus.Level(level))
+	}
 	utils.RegisterLoggerFormater(loggers["main"])
-	loggers["main"].SetLevel(logrus.TraceLevel)
 }
 
 func GetLogger() *logrus.Logger {

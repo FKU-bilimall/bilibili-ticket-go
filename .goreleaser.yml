@@ -1,27 +1,29 @@
 version: 2
 project_name: bilibili-ticket-go
 
+before:
+  hooks:
+    - go mod tidy
+    - go install mvdan.cc/garble@latest
+
 builds:
   - id: bilibili-ticket-go-obf
     main: main.go
     goos:
       - windows
-      - linux
-      - darwin
+      #- linux
+      #- darwin
     goarch:
       - amd64
       - arm64
-    ldflags: -s -w -X "global.GitCommit={{.Commit}}" -X "global.BuildTime={{.Timestamp}}"
+    ldflags: -s -w -X "bilibili-ticket-go/global.GitCommit={{.ShortCommit}}" -X "bilibili-ticket-go/global.BuildTime={{.Timestamp}}" -X "bilibili-ticket-go/global.LoggerLevel=4"
     env:
       - CGO_ENABLED=0
     tool: garble
     binary: bilibili-ticket-go-obf
-    command: "-literals -tiny"
-    flags: [ "build" ]
-    hooks:
-      pre:
-        - go mod tidy
-        - go install mvdan.cc/garble@latest
+    command: "-tiny"
+    flags: ["-seed=random", "build", "-trimpath" ]
+
 archives:
   - formats: zip
     name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}_obf"

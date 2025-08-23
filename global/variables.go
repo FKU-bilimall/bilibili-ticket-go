@@ -1,4 +1,5 @@
 package global
 
 var GitCommit = "Development"
-var BuildTime = ""
+var BuildTime = "-1"
+var LoggerLevel = "6"

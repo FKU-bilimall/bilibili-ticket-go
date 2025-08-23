@@ -49,6 +49,7 @@ func NewConfiguration() (*Configuration, error) {
 	configuration.viper = v
 	return configuration, nil
 }
+
 func (c *Configuration) Save() error {
 	c.viper.Set("bilibili", &c.Bilibili)
 	err := c.viper.WriteConfig()

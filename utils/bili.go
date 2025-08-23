@@ -3,7 +3,6 @@ package utils
 import (
 	"crypto/md5"
 	"fmt"
-	"math/rand"
 	"strconv"
 	"strings"
 	"time"
@@ -28,13 +27,6 @@ func GenerateXUBUVID() string {
 	IDe += IDMD5[12:12]
 	IDe += IDMD5[22:22]
 	return strings.ToUpper("XU" + IDe + IDMD5)
-}
-
-func GenerateRandomDRMID(length int) []byte {
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	buf := make([]byte, length)
-	r.Read(buf)
-	return buf
 }
 
 func GetFpLocal(BUVID string, model string, firmwareVersion string) string {

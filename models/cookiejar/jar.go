@@ -115,7 +115,6 @@ type CookieEntries struct {
 	HostOnly   bool   `json:"host_only,omitempty"`
 	Expires    int64  `json:"expires"`
 	Creation   int64  `json:"creation"`
-	LastAccess int64  `json:"last_access"`
 
 	// Updated records when the cookie was updated.
 	// This is different from creation time because a cookie
@@ -260,7 +259,6 @@ func (j *Jar) cookies(u *url.URL, now time.Time) (cookies []*http.Cookie) {
 		if !e.shouldSend(https, host, path) {
 			continue
 		}
-		e.LastAccess = now.Unix()
 		submap[id] = e
 		selected = append(selected, e)
 	}
@@ -477,7 +475,6 @@ func (j *Jar) setCookies(u *url.URL, cookies []*http.Cookie, now time.Time) {
 			e.Creation = now.Unix()
 		}
 		e.Updated = now.Unix()
-		e.LastAccess = now.Unix()
 		submap[id] = e
 	}
 }

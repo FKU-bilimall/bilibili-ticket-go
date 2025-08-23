@@ -5,7 +5,6 @@ import (
 	"bilibili-ticket-go/bili/clock"
 	"bilibili-ticket-go/bili/models/api"
 	_return "bilibili-ticket-go/bili/models/return"
-	"bilibili-ticket-go/bili/ticket"
 	"bilibili-ticket-go/bili/token"
 	"bilibili-ticket-go/global"
 	"bilibili-ticket-go/models"
@@ -33,6 +32,7 @@ var (
 	logger         = utils.GetLogger(global.GetLogger(), "main", nil)
 	biliClient     *client.Client
 	conf           *models.Configuration
+	data           *models.DataStorage
 	jar            *cookiejar.Jar
 	app            *tview.Application
 	loggerTextview *tview.TextView
@@ -65,6 +65,10 @@ func init() {
 	req.SetDefaultClient(req.DefaultClient().SetLogger(utils.GetLogger(global.GetLogger(), "network", nil)).EnableDebugLog())
 	var err error
 	conf, err = models.NewConfiguration()
+	if err != nil {
+		panic(err)
+	}
+	data, err = models.NewDataStorage()
 	if err != nil {
 		panic(err)
 	}
@@ -102,6 +106,9 @@ func main() {
 			conf.Bilibili.RefreshToken = t
 		}
 		conf.Save()
+	}()
+	defer func() {
+		data.Save()
 	}()
 	app = tview.NewApplication().EnableMouse(true).EnablePaste(true)
 	mainPages := primitives.NewPages()
@@ -344,19 +351,23 @@ func main() {
 					}
 					ticketList.SetOptions(options, ticketSelectFunc)
 				}
-				startTestFunc = func() {
+				addToWaitingQueue = func() {
 					mutex.Lock()
 					defer mutex.Unlock()
 					pid, err := strconv.ParseInt(projectID, 10, 64)
 					if err != nil {
 						return
 					}
-					r := ticket.NewTicketRoutine(biliClient, targetBuyer.Id, pid, selectedTicket.SkuID, selectedTicket.ScreenID)
-					r.Start()
-					go func() {
-						time.Sleep(5 * time.Second)
-						r.Stop()
-					}()
+					data.AddTicket(models.TicketData{
+						ExpireTimestamp: selectedTicket.SaleStat.End.Unix(),
+						BuyerID:         targetBuyer.Id,
+						ProjectID:       pid,
+						SkuID:           selectedTicket.SkuID,
+						ScreenID:        selectedTicket.ScreenID,
+					})
+					tutils.PopupModal("Add to queue Successfully", mainPages, map[string]func() bool{
+						"OK": func() bool { return true },
+					}, k)
 				}
 			)
 			root := tview.NewFlex().SetDirection(tview.FlexRow)
@@ -391,7 +402,7 @@ func main() {
 			root.AddItem(tview.NewBox(), 1, 0, false)
 			root.AddItem(buyerList, 1, 0, false)
 			root.AddItem(tview.NewBox(), 1, 0, false)
-			root.AddItem(tview.NewButton(" Test ").SetSelectedFunc(startTestFunc), 1, 0, false)
+			root.AddItem(tview.NewButton(" Add to Automatic Ticket Booking Queue ").SetSelectedFunc(addToWaitingQueue), 1, 0, false)
 			functionPages.AddPage("ticket", root, true, false)
 		}
 	}
@@ -426,8 +437,10 @@ func main() {
 	})
 	go func() {
 		logger.Info("It's Bilibili-Ticket-Go!!!!!")
-		logger.Warn(fmt.Sprintf("This is a %s Bilibili Client for ticket booking.", color.New(color.FgHiRed).Sprint("FREE")))
+		logger.Warnf("This is a %s Bilibili Client for ticket booking.", color.New(color.FgHiRed).Sprint("FREE"))
 		logger.Info("Under the AGPLv3 License.")
+		logger.Infof("Commit hash: %s", global.GitCommit)
+		logger.Infof("Build timestamp: %s", global.BuildTime)
 		err, r := biliClient.GetLoginStatus()
 		if err != nil {
 			logger.Errorf("Something went wrong when get logging status, %v", err)
