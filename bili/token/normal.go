@@ -17,5 +17,5 @@ func (g *NormalTokenGenerator) GenerateTokenCreateStage(_ time.Time) string {
 }
 
 func (g *NormalTokenGenerator) IsHotProject() bool {
-	return true
+	return false
 }

@@ -17,8 +17,8 @@ import (
 type TicketRoutine struct {
 	mutex     sync.Mutex
 	client    *client.Client
-	buyerID   int64
-	ProjectID int64
+	buyer     r.BuyerInformation //if is "-1", doesn't use any buyer
+	projectID int64
 	skuID     int64
 	screenID  int64
 	ctx       context.Context
@@ -26,13 +26,13 @@ type TicketRoutine struct {
 	cancel    context.CancelFunc
 }
 
-func NewTicketRoutine(client *client.Client, buyerID int64, ProjectID int64, skuID int64, screenID int64) *TicketRoutine {
+func NewTicketRoutine(client *client.Client, buyer r.BuyerInformation, ProjectID int64, skuID int64, screenID int64) *TicketRoutine {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &TicketRoutine{
 		client:    client,
 		isRunning: false,
-		buyerID:   buyerID,
-		ProjectID: ProjectID,
+		buyer:     buyer,
+		projectID: ProjectID,
 		ctx:       ctx,
 		cancel:    cancel,
 		skuID:     skuID,
@@ -49,7 +49,7 @@ func (tr *TicketRoutine) Start() {
 	}
 
 	tr.isRunning = true
-	go run(tr.client, tr.buyerID, tr.ProjectID, tr.skuID, tr.screenID, 500*time.Millisecond, tr.ctx)
+	go run(tr.client, tr.buyer, tr.projectID, tr.skuID, tr.screenID, 500*time.Millisecond, tr.ctx)
 }
 
 func (tr *TicketRoutine) Stop() {
@@ -64,8 +64,14 @@ func (tr *TicketRoutine) Stop() {
 	tr.isRunning = false
 }
 
-func run(client *client.Client, buyerID int64, projectID int64, skuID int64, screenID int64, interval time.Duration, ctx context.Context) {
-	logger := utils.GetLogger(global.GetLogger(), fmt.Sprintf("%d-%d-%d", projectID, skuID, buyerID), nil)
+func run(client *client.Client, buyerID r.BuyerInformation, projectID int64, skuID int64, screenID int64, interval time.Duration, ctx context.Context) {
+	var bid string
+	if buyerID.ContactInfo != nil {
+		bid = buyerID.ContactInfo.Tel
+	} else {
+		bid = strconv.FormatInt(buyerID.ForceRealNameBuyer.Id, 10)
+	}
+	logger := utils.GetLogger(global.GetLogger(), fmt.Sprintf("%d-%d-%s", projectID, skuID, bid), nil)
 	err, info := client.GetProjectInformation(strconv.FormatInt(projectID, 10))
 	if err != nil {
 		logger.Errorf("GetProjectInformation err: %v", err)
@@ -121,14 +127,14 @@ func run(client *client.Client, buyerID int64, projectID int64, skuID int64, scr
 				}
 				goto SLEEP
 			}
-			if buyer == nil {
+			if buyer == nil && buyerID.ForceRealNameBuyer != nil {
 				err, confirm := client.GetConfirmInformation(tk, strconv.FormatInt(projectID, 10))
 				if err != nil {
 					logger.Errorf("GetConfirmInformation err: %v", err)
 					goto SLEEP
 				}
 				for _, b := range confirm.BuyerList.List {
-					if b.Id == buyerID {
+					if b.Id == buyerID.ForceRealNameBuyer.Id {
 						buyer = &b
 					}
 				}
@@ -137,7 +143,10 @@ func run(client *client.Client, buyerID int64, projectID int64, skuID int64, scr
 					return
 				}
 			}
-			err, code, msg, to = client.SubmitOrder(tokenGen, whenGenPtoken, tk, strconv.FormatInt(projectID, 10), *ticket, *buyer)
+			err, code, msg, to = client.SubmitOrder(tokenGen, whenGenPtoken, tk, strconv.FormatInt(projectID, 10), *ticket, r.BuyerInformation{
+				ForceRealNameBuyer: buyer,
+				ContactInfo:        buyerID.ContactInfo,
+			})
 			if err != nil {
 				logger.Errorf("SubmitOrder err: %v", err)
 				goto SLEEP

@@ -9,23 +9,25 @@ import (
 )
 
 func GetBilibiliClockOffset() (time.Duration, error) {
+	now := time.Now()
 	res, err := req.R().EnableTrace().Get("https://api.live.bilibili.com/xlive/open-interface/v1/rtc/getTimestamp")
 	if err != nil {
 		return 0, err
 	}
-	now := time.Now()
 	var r api.MainApiDataRoot[api.RTCTimestamp]
 	err = res.Unmarshal(&r)
 	if err != nil {
 		return 0, err
 	}
 	t := res.TraceInfo()
-	NO := t.FirstResponseTime + t.ResponseTime
-	return time.UnixMilli(r.Data.Microtime).Add(NO).Sub(now), nil
+	NetworkOffset := t.FirstResponseTime + t.ResponseTime
+	return time.UnixMilli(r.Data.Microtime).Add(-NetworkOffset).Sub(now), nil
 }
 
-func GetAliyunClockOffset() (time.Duration, error) {
-	q, err := ntp.Query("ntp.aliyun.com")
+// GetNTPClockOffset queries the given NTP server and returns the clock offset.
+// Recommended NTP server: ntp.aliyun.com
+func GetNTPClockOffset(ntpServerAddr string) (time.Duration, error) {
+	q, err := ntp.Query(ntpServerAddr)
 	if err != nil {
 		return 0, err
 	}

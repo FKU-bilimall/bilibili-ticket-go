@@ -2,10 +2,10 @@ package main
 
 import (
 	client "bilibili-ticket-go/bili"
-	"bilibili-ticket-go/bili/clock"
 	"bilibili-ticket-go/bili/models/api"
 	_return "bilibili-ticket-go/bili/models/return"
 	"bilibili-ticket-go/bili/token"
+	"bilibili-ticket-go/clock"
 	"bilibili-ticket-go/global"
 	"bilibili-ticket-go/models"
 	"bilibili-ticket-go/models/cookiejar"
@@ -45,6 +45,7 @@ var (
 		LocalTime:        true,
 		BackupTimeFormat: "20060102-150405",
 	}
+	ticketOngoingInstance = ""
 )
 
 func init() {
@@ -89,9 +90,9 @@ func main() {
 	} else {
 		logger.Trace("The Offset Between You and Bilibili Server: ", bc)
 	}
-	ac, err := clock.GetAliyunClockOffset()
+	ac, err := clock.GetNTPClockOffset("ntp.aliyun.com")
 	if err != nil {
-		logger.Warn("Failed to get Aliyun clock offset: ", err)
+		logger.Warn("Failed to get NTP clock offset: ", err)
 	} else {
 		logger.Trace("The Offset Between You and Aliyun NTP Server: ", ac)
 	}
@@ -234,7 +235,6 @@ func main() {
 						root.AddItem(eta, 1, 0, false)
 						return
 					}()
-
 				})
 				root.AddItem(btn, 3, 0, false)
 			}
@@ -249,9 +249,7 @@ func main() {
 				hotProject     bool
 				buyers         []api.BuyerStruct
 				targetBuyer    api.BuyerStruct
-				//ticketGen      token.Generator
 			)
-			_ = targetBuyer
 			var (
 				ticketList        *tview.DropDown
 				buyerList         *tview.DropDown
@@ -293,8 +291,6 @@ func main() {
 					buyerList.SetOptions(buyerOptions, buyerSelectedFunc)
 				}
 				resetFunc = func() {
-					mutex.Lock()
-					defer mutex.Unlock()
 					if projectID == input.GetText() && projectID != "" {
 						return
 					}
@@ -304,9 +300,9 @@ func main() {
 					buyerList.SetOptions([]string{"Nothing"}, nil)
 				}
 				refreshFunc = func() {
-					resetFunc()
 					mutex.Lock()
 					defer mutex.Unlock()
+					resetFunc()
 					if input.GetText() == "" {
 						return
 					}
@@ -321,6 +317,7 @@ func main() {
 						tutils.PopupModal(fmt.Sprintf("Bilibili API Returned An Unexpected Value,\n%s", err), mainPages, map[string]func() bool{
 							"OK": func() bool { return true },
 						}, k)
+						resetFunc()
 						return
 					}
 					hotProject = projectIDInfo.IsHotProject
@@ -330,6 +327,7 @@ func main() {
 						tutils.PopupModal(fmt.Sprintf("Bilibili API Returned An Unexpected Value,\n%s", err), mainPages, map[string]func() bool{
 							"OK": func() bool { return true },
 						}, k)
+						resetFunc()
 						return
 					}
 					ticketList.SetOptions(nil, nil)
@@ -347,6 +345,7 @@ func main() {
 						tutils.PopupModal("No valid tickets found", mainPages, map[string]func() bool{
 							"OK": func() bool { return true },
 						}, k)
+						resetFunc()
 						return
 					}
 					ticketList.SetOptions(options, ticketSelectFunc)
@@ -373,12 +372,6 @@ func main() {
 			root := tview.NewFlex().SetDirection(tview.FlexRow)
 			buyerList = tview.NewDropDown().SetLabel("Select Buyer: ").SetOptions([]string{"Nothing"}, nil)
 			ticketList = tview.NewDropDown().SetLabel("Select Ticket: ").SetOptions([]string{"Nothing"}, nil)
-			resetFunc = func() {
-				mutex.Lock()
-				defer mutex.Unlock()
-				ticketList.SetOptions([]string{"Nothing"}, nil)
-				buyerList.SetOptions([]string{"Nothing"}, nil)
-			}
 			input = tview.NewInputField().
 				SetAcceptanceFunc(func(text string, ch rune) bool {
 					_, err := strconv.Atoi(text)
@@ -388,6 +381,8 @@ func main() {
 				SetFieldWidth(20).
 				SetPlaceholder("Enter Project ID").
 				SetChangedFunc(func(text string) {
+					mutex.Lock()
+					defer mutex.Unlock()
 					resetFunc()
 				})
 			input.SetDoneFunc(func(key tcell.Key) { refreshFunc() })
@@ -405,6 +400,28 @@ func main() {
 			root.AddItem(tview.NewButton(" Add to Automatic Ticket Booking Queue ").SetSelectedFunc(addToWaitingQueue), 1, 0, false)
 			functionPages.AddPage("ticket", root, true, false)
 		}
+		{
+
+			root := tview.NewFlex()
+			list := tview.NewList()
+			list.AddItem("A", "", 0, nil)
+			listFlex := tview.NewFlex().AddItem(list, 0, 1, true)
+			listFlex.SetTitle("Pending List").SetBorder(true)
+			root.AddItem(listFlex, 20, 0, false)
+			root.AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+				AddItem(tview.NewFlex().SetDirection(tview.FlexRow), 0, 1, false).
+				AddItem(tview.NewFlex().SetDirection(tview.FlexColumn).
+					AddItem(tview.NewBox(), 2, 0, false).
+					AddItem(tview.NewButton("Cancel Task"), 0, 1, false).
+					AddItem(tview.NewBox(), 2, 0, false).
+					AddItem(tview.NewButton("Force Start").SetDisabled(true), 0, 1, false).
+					AddItem(tview.NewBox(), 2, 0, false),
+					1, 1, false), 0, 1, false)
+			functionPages.AddPage("status",
+				root,
+				true,
+				false)
+		}
 	}
 	{
 		featureChoose.SetBorder(true).SetTitle("Features")
@@ -413,6 +430,8 @@ func main() {
 			list.AddItem("Bilibili Client", "Account Info/Login", 'l', func() {})
 			list.AddItem("Logs", "Latest Logs", 'o', func() {})
 			list.AddItem("Ticket", "Ticket Booking", 't', func() {})
+			list.AddItem("Status", "Booking Status", 's', func() {})
+			list.AddItem("Settings", "Configure", 'c', func() {})
 			list.SetSelectedFunc(func(i int, mt string, _ string, _ rune) {
 				functionPages.SetTitle(strings.ToUpper(mt))
 				switch i {
@@ -422,6 +441,8 @@ func main() {
 					functionPages.SwitchToPage("logs")
 				case 2:
 					functionPages.SwitchToPage("ticket")
+				case 3:
+					functionPages.SwitchToPage("status")
 				}
 			})
 			featureChoose.AddItem(list, 0, 1, true)

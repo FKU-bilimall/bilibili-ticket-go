@@ -4,6 +4,7 @@ import (
 	"bilibili-ticket-go/bili/models/api"
 	r "bilibili-ticket-go/bili/models/return"
 	"bilibili-ticket-go/bili/token"
+	"bilibili-ticket-go/models/errors"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -96,9 +97,9 @@ func (c *Client) GetRequestTokenAndPToken(tk token.Generator, projectID string, 
 		"count":         1,
 		"sku_id":        ticket.SkuID,
 		"requestSource": "pc-new",
+		"newRisk":       true,
 	}
 	if tk.IsHotProject() {
-		form["newRisk"] = true
 		form["token"] = tk.GenerateTokenPrepareStage()
 	}
 	req, err := c.http.R().SetBodyJsonMarshal(form).Post("https://show.bilibili.com/api/ticket/order/prepare?project_id=" + projectID)
@@ -143,12 +144,8 @@ func (c *Client) GetConfirmInformation(tokens *r.RequestTokenAndPToken, projectI
 	return nil, &data.Data
 }
 
-func (c *Client) SubmitOrder(tk token.Generator, whenGenPToken time.Time, tokens *r.RequestTokenAndPToken, projectID string, ticket r.TicketSkuScreenID, buyer api.BuyerStruct) (error, int, string, api.TicketOrderStruct) {
-	bs, err := json.Marshal([1]api.BuyerStruct{buyer})
-	if err != nil {
-		return err, -1, "", api.TicketOrderStruct{}
-	}
-	form := map[string]string{
+func (c *Client) SubmitOrder(tk token.Generator, whenGenPToken time.Time, tokens *r.RequestTokenAndPToken, projectID string, ticket r.TicketSkuScreenID, buyer r.BuyerInformation) (error, int, string, api.TicketOrderStruct) {
+	form := map[string]any{
 		"project_id":    projectID,
 		"screen_id":     strconv.FormatInt(ticket.ScreenID, 10),
 		"count":         "1",
@@ -156,10 +153,17 @@ func (c *Client) SubmitOrder(tk token.Generator, whenGenPToken time.Time, tokens
 		"order_type":    "1",
 		"timestamp":     strconv.FormatInt(whenGenPToken.Unix(), 10),
 		"deviceId":      c.fingerprint.Buvidfp,
-		"buyer_info":    string(bs),
 		"click_postion": fmt.Sprintf("{\"x\":948,\"y\":997,\"origin\":%d,\"now\":%d}", whenGenPToken, time.Now().Unix()),
 		"sku_id":        strconv.FormatInt(ticket.SkuID, 10),
 		"requestSource": "pc-new",
+	}
+	if buyer.ForceRealNameBuyer != nil {
+		bs, _ := json.Marshal(buyer.ForceRealNameBuyer)
+		form["buyer_info"] = string(bs)
+	} else if buyer.ContactInfo != nil {
+		form["contact_info"] = buyer.ContactInfo
+	} else {
+		return errors.NewTicketEmptyContactError(projectID, strconv.FormatInt(ticket.SkuID, 10), strconv.FormatInt(ticket.ScreenID, 10)), -1, "", api.TicketOrderStruct{}
 	}
 	if tk.IsHotProject() {
 		form["newRisk"] = "true"

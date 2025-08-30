@@ -15,8 +15,15 @@ type Bilibili struct {
 	InfocUUID    string
 	Fingerprint  bili.Fingerprint
 }
+
+type TicketSetting struct {
+	AutoStartBuying bool   `mapstructure:"autoStartBuying"`
+	NtpServer       string `mapstructure:"ntpServer"`
+}
+
 type Configuration struct {
-	Bilibili *Bilibili `mapstructure:"bilibili"`
+	Bilibili *Bilibili      `mapstructure:"bilibili"`
+	Ticket   *TicketSetting `mapstructure:"ticket"`
 	viper    *viper.Viper
 }
 
@@ -30,6 +37,11 @@ func NewConfiguration() (*Configuration, error) {
 			Cookies: make([]cookiejar.CookieEntries, 0),
 		},
 	)
+	v.SetDefault("ticket",
+		&TicketSetting{
+			AutoStartBuying: false,
+			NtpServer:       "ntp.aliyun.com",
+		})
 	err := v.SafeWriteConfig()
 	if err != nil {
 		var configFileAlreadyExistsError viper.ConfigFileAlreadyExistsError

@@ -1,6 +1,9 @@
 package _return
 
-import "time"
+import (
+	"bilibili-ticket-go/bili/models/api"
+	"time"
+)
 
 type TicketSkuScreenID struct {
 	ScreenID int64
@@ -29,4 +32,15 @@ type ProjectInformation struct {
 	StartTime    time.Time
 	EndTime      time.Time
 	IsHotProject bool
+}
+
+type BuyerInformation struct {
+	ForceRealNameBuyer *api.BuyerStruct
+	ContactInfo        *ContactInfoStruct
+}
+
+type ContactInfoStruct struct {
+	Tel      string `json:"tel"`
+	Uid      int64  `json:"uid"`
+	Username string `json:"username"`
 }
