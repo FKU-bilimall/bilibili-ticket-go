@@ -11,8 +11,8 @@ builds:
     main: main.go
     goos:
       - windows
-      #- linux
-      #- darwin
+      - linux
+      - darwin
     goarch:
       - amd64
       - arm64
