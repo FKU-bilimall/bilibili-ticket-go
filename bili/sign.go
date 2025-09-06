@@ -1,7 +1,7 @@
 package bili
 
 import (
-	"bilibili-ticket-go/bili/models/api"
+	"bilibili-ticket-go/models/bili/api"
 	"bilibili-ticket-go/utils"
 	"bilibili-ticket-go/utils/hashs"
 	"crypto/md5"
@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -75,22 +76,29 @@ func (c *Client) getSignedParameterWithAbi(forceUpdate bool, u *url.URL) error {
 	return nil
 }
 
-func (c *Client) getSignedParameterWithApp(u *url.URL) {
-	values := u.Query()
+func (c *Client) getSignedParameterWithApp(params map[string]any) url.Values {
+	values := url.Values{}
+	for k, v := range params {
+		values.Set(k, fmt.Sprint(v))
+	}
 	values.Del("sign")
+	values.Del("appkey")
+	values.Del("ts")
 	values.Set("appkey", appKey)
+	values.Set("ts", strconv.FormatInt(time.Now().Unix(), 10))
 	sign := md5.Sum([]byte(values.Encode() + appSec))
 	logger.Debugf("Queries: %s, App Sign: %s", values.Encode(), hex.EncodeToString(sign[:]))
 	values.Set("sign", hex.EncodeToString(sign[:]))
-	u.RawQuery = values.Encode()
+	return values
 }
 
 func (c *Client) identifyCookieSign() http.Cookie {
-	u, _ := url.Parse(fmt.Sprintf("https://example.com/?ts=%d", time.Now().Unix()))
-	c.getSignedParameterWithApp(u)
+	query := c.getSignedParameterWithApp(map[string]any{
+		"ts": time.Now().Unix(),
+	})
 	return http.Cookie{
 		Name:  "identify",
-		Value: u.Query().Encode(),
+		Value: query.Encode(),
 	}
 }
 

@@ -1,7 +1,7 @@
 package _return
 
 import (
-	"bilibili-ticket-go/bili/models/api"
+	"bilibili-ticket-go/models/bili/api"
 	"time"
 )
 

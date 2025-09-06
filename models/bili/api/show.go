@@ -86,7 +86,7 @@ type BuyerStruct struct {
 	Uid                 int64       `json:"uid"`
 	AccountId           int         `json:"accountId"`
 	Name                string      `json:"name"`
-	Buyer               interface{} `json:"buyer"`
+	Buyer               interface{} `json:"buyer,"`
 	Tel                 string      `json:"tel"`
 	DisabledErr         interface{} `json:"disabledErr"`
 	AccountChannel      string      `json:"account_channel"`
@@ -105,4 +105,23 @@ type TicketOrderStruct struct {
 	OrderCreateTime int64  `json:"orderCreateTime"`
 	Token           string `json:"token"`
 	PayMoney        int    `json:"pay_money"`
+}
+
+type BuyerNoSensitiveInfoApiStruct struct {
+	Vo struct {
+		List []BuyerNoSensitiveStruct `json:"list"`
+	} `json:"vo"`
+}
+
+type BuyerNoSensitiveStruct struct {
+	Id           int64  `json:"id"`
+	Uid          int64  `json:"uid"`
+	Name         string `json:"name"`
+	IdType       int    `json:"idType"`
+	IdName       string `json:"idName"`
+	IdCard       string `json:"idCard"`
+	Tel          string `json:"tel"`
+	ViewType     string `json:"viewType"`
+	VerifyStatus int    `json:"verifyStatus"`
+	Status       int    `json:"status"`
 }

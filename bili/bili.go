@@ -1,8 +1,8 @@
 package bili
 
 import (
-	"bilibili-ticket-go/bili/models/api"
 	"bilibili-ticket-go/global"
+	"bilibili-ticket-go/models/bili/api"
 	"bilibili-ticket-go/models/errors"
 	"bilibili-ticket-go/utils"
 	"fmt"
@@ -225,9 +225,9 @@ func (c *Client) GetQRLoginState(qrcodeKey string) (error, *api.VerifyQRLoginSta
 		if err != nil {
 			logger.Warnf("getBuvid34AndBnut() err: %v", err)
 		}
-		err, _ = c.RefreshNewBiliTicket()
+		err, _ = c.TryToRefreshNewBiliTicket()
 		if err != nil {
-			logger.Warnf("RefreshNewBiliTicket() err: %v", err)
+			logger.Warnf("TryToRefreshNewBiliTicket() err: %v", err)
 		}
 	}
 	return nil, &r.Data

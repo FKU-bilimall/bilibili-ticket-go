@@ -1,7 +1,7 @@
 package clock
 
 import (
-	"bilibili-ticket-go/bili/models/api"
+	api2 "bilibili-ticket-go/models/bili/api"
 	"time"
 
 	"github.com/beevik/ntp"
@@ -14,7 +14,7 @@ func GetBilibiliClockOffset() (time.Duration, error) {
 	if err != nil {
 		return 0, err
 	}
-	var r api.MainApiDataRoot[api.RTCTimestamp]
+	var r api2.MainApiDataRoot[api2.RTCTimestamp]
 	err = res.Unmarshal(&r)
 	if err != nil {
 		return 0, err

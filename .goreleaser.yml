@@ -22,7 +22,7 @@ builds:
     tool: garble
     binary: bilibili-ticket-go-obf
     command: "-tiny"
-    flags: ["-seed=random", "build", "-trimpath" ]
+    flags: ["build", "-trimpath" ]
 
 archives:
   - formats: zip

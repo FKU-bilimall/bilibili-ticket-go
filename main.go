@@ -2,12 +2,10 @@ package main
 
 import (
 	client "bilibili-ticket-go/bili"
-	"bilibili-ticket-go/bili/models/api"
-	_return "bilibili-ticket-go/bili/models/return"
-	"bilibili-ticket-go/bili/token"
 	"bilibili-ticket-go/clock"
 	"bilibili-ticket-go/global"
 	"bilibili-ticket-go/models"
+	"bilibili-ticket-go/models/bili/return"
 	"bilibili-ticket-go/models/cookiejar"
 	"bilibili-ticket-go/models/hooks"
 	"bilibili-ticket-go/tui/keyboard"
@@ -246,63 +244,60 @@ func main() {
 				selectedTicket _return.TicketSkuScreenID
 				mutex          = sync.Mutex{} // Mutex to protect shared data
 				projectID      string
-				hotProject     bool
-				buyers         []api.BuyerStruct
-				targetBuyer    api.BuyerStruct
+				buyersID       []int64
+				targetBuyer    int64
 			)
 			var (
 				ticketList        *tview.DropDown
 				buyerList         *tview.DropDown
 				input             *tview.InputField
+				addToQueueBtn     *tview.Button
 				buyerSelectedFunc = func(text string, index int) {
-					targetBuyer = buyers[index]
+					targetBuyer = buyersID[index]
+					addToQueueBtn.SetDisabled(false)
 				}
 				ticketSelectFunc = func(text string, index int) {
 					mutex.Lock()
 					defer mutex.Unlock()
 					selectedTicket = tickets[index]
-					var tkgen token.Generator
-					if hotProject {
-						tkgen = token.NewCTokenGenerator()
-					} else {
-						tkgen = token.NewNormalTokenGenerator()
-					}
-					err, tokens := biliClient.GetRequestTokenAndPToken(tkgen, projectID, selectedTicket)
+					err, buyers := biliClient.GetBuyerNoSensitiveInfo()
 					if err != nil {
-						logger.Errorf("GetRequestTokenAndPToken error: %v", err)
+						logger.Errorf("GetBuyerNoSensitiveInfo error: %v", err)
 						tutils.PopupModal(fmt.Sprintf("Bilibili API Returned An Unexpected Value,\n%s", err), mainPages, map[string]func() bool{
 							"OK": func() bool { return true },
 						}, k)
 						return
 					}
-					err, confirm := biliClient.GetConfirmInformation(tokens, projectID)
-					if err != nil {
-						logger.Errorf("GetConfirmInformation error: %v", err)
-						tutils.PopupModal(fmt.Sprintf("Bilibili API Returned An Unexpected Value,\n%s", err), mainPages, map[string]func() bool{
-							"OK": func() bool { return true },
-						}, k)
-						return
-					}
-					buyers = confirm.BuyerList.List
 					var buyerOptions []string
+					var buyersIDA []int64
 					for _, buyer := range buyers {
-						buyerOptions = append(buyerOptions, fmt.Sprintf("%s-%s-%s", buyer.Name, buyer.Tel, buyer.PersonalId))
+						buyerOptions = append(buyerOptions, fmt.Sprintf("%s-%s", buyer.Name, buyer.IdCard))
+						buyersIDA = append(buyersID, buyer.Id)
 					}
+					buyersID = buyersIDA
 					buyerList.SetOptions(buyerOptions, buyerSelectedFunc)
+					buyerList.SetDisabled(false)
 				}
-				resetFunc = func() {
+				resetSelectionFunc = func() {
 					if projectID == input.GetText() && projectID != "" {
 						return
 					}
 					tickets = *new([]_return.TicketSkuScreenID)
 					selectedTicket = *new(_return.TicketSkuScreenID)
+					buyersID = []int64{}
+					targetBuyer = -1
+					ticketList.SetDisabled(true)
+					buyerList.SetDisabled(true)
+					addToQueueBtn.SetDisabled(true)
 					ticketList.SetOptions([]string{"Nothing"}, nil)
 					buyerList.SetOptions([]string{"Nothing"}, nil)
+					ticketList.SetCurrentOption(0)
+					buyerList.SetCurrentOption(0)
 				}
-				refreshFunc = func() {
+				refreshTicketFunc = func() {
 					mutex.Lock()
 					defer mutex.Unlock()
-					resetFunc()
+					resetSelectionFunc()
 					if input.GetText() == "" {
 						return
 					}
@@ -311,26 +306,14 @@ func main() {
 						return
 					}
 					projectID = input.GetText()
-					err, projectIDInfo := biliClient.GetProjectInformation(input.GetText())
-					if err != nil {
-						logger.Errorf("GetProjectInformation error: %v", err)
-						tutils.PopupModal(fmt.Sprintf("Bilibili API Returned An Unexpected Value,\n%s", err), mainPages, map[string]func() bool{
-							"OK": func() bool { return true },
-						}, k)
-						resetFunc()
-						return
-					}
-					hotProject = projectIDInfo.IsHotProject
 					err, i = biliClient.GetTicketSkuIDsByProjectID(input.GetText())
 					if err != nil {
 						logger.Errorf("GetTicketSkuIDsByProjectID error: %v", err)
 						tutils.PopupModal(fmt.Sprintf("Bilibili API Returned An Unexpected Value,\n%s", err), mainPages, map[string]func() bool{
 							"OK": func() bool { return true },
 						}, k)
-						resetFunc()
 						return
 					}
-					ticketList.SetOptions(nil, nil)
 					var options []string
 					var validTickets []_return.TicketSkuScreenID
 					for _, t := range i {
@@ -345,10 +328,11 @@ func main() {
 						tutils.PopupModal("No valid tickets found", mainPages, map[string]func() bool{
 							"OK": func() bool { return true },
 						}, k)
-						resetFunc()
 						return
 					}
+					ticketList.SetOptions(nil, nil)
 					ticketList.SetOptions(options, ticketSelectFunc)
+					ticketList.SetDisabled(false)
 				}
 				addToWaitingQueue = func() {
 					mutex.Lock()
@@ -359,7 +343,7 @@ func main() {
 					}
 					data.AddTicket(models.TicketData{
 						ExpireTimestamp: selectedTicket.SaleStat.End.Unix(),
-						BuyerID:         targetBuyer.Id,
+						BuyerID:         targetBuyer,
 						ProjectID:       pid,
 						SkuID:           selectedTicket.SkuID,
 						ScreenID:        selectedTicket.ScreenID,
@@ -372,6 +356,10 @@ func main() {
 			root := tview.NewFlex().SetDirection(tview.FlexRow)
 			buyerList = tview.NewDropDown().SetLabel("Select Buyer: ").SetOptions([]string{"Nothing"}, nil)
 			ticketList = tview.NewDropDown().SetLabel("Select Ticket: ").SetOptions([]string{"Nothing"}, nil)
+			ticketList.SetCurrentOption(0)
+			buyerList.SetCurrentOption(0)
+			ticketList.SetDisabledStyle(tcell.StyleDefault.Background(tcell.ColorLightBlue).Foreground(tview.Styles.ContrastSecondaryTextColor)).SetDisabled(true)
+			buyerList.SetDisabledStyle(tcell.StyleDefault.Background(tcell.ColorLightBlue).Foreground(tview.Styles.ContrastSecondaryTextColor)).SetDisabled(true)
 			input = tview.NewInputField().
 				SetAcceptanceFunc(func(text string, ch rune) bool {
 					_, err := strconv.Atoi(text)
@@ -383,41 +371,54 @@ func main() {
 				SetChangedFunc(func(text string) {
 					mutex.Lock()
 					defer mutex.Unlock()
-					resetFunc()
+					resetSelectionFunc()
 				})
-			input.SetDoneFunc(func(key tcell.Key) { refreshFunc() })
+			input.SetDoneFunc(func(key tcell.Key) { refreshTicketFunc() })
 			root.AddItem(tview.NewFlex().
 				SetDirection(tview.FlexColumn).
 				AddItem(input, 32, 1, false).
 				AddItem(tview.NewBox(), 2, 0, false).
-				AddItem(tview.NewButton("OK").SetSelectedFunc(refreshFunc), 4, 0, false),
+				AddItem(tview.NewButton("OK").SetSelectedFunc(refreshTicketFunc), 4, 0, false),
 				1, 0, false)
 			root.AddItem(tview.NewBox(), 1, 0, false)
 			root.AddItem(ticketList, 1, 0, false)
 			root.AddItem(tview.NewBox(), 1, 0, false)
 			root.AddItem(buyerList, 1, 0, false)
 			root.AddItem(tview.NewBox(), 1, 0, false)
-			root.AddItem(tview.NewButton(" Add to Automatic Ticket Booking Queue ").SetSelectedFunc(addToWaitingQueue), 1, 0, false)
+			addToQueueBtn = tview.NewButton(" Add to Automatic Ticket Booking Queue ").SetSelectedFunc(addToWaitingQueue)
+			addToQueueBtn.SetDisabled(true)
+			root.AddItem(addToQueueBtn, 1, 0, false)
 			functionPages.AddPage("ticket", root, true, false)
 		}
 		{
-
 			root := tview.NewFlex()
 			list := tview.NewList()
 			list.AddItem("A", "", 0, nil)
 			listFlex := tview.NewFlex().AddItem(list, 0, 1, true)
 			listFlex.SetTitle("Pending List").SetBorder(true)
 			root.AddItem(listFlex, 20, 0, false)
-			root.AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-				AddItem(tview.NewFlex().SetDirection(tview.FlexRow), 0, 1, false).
+			detail := tview.NewFlex().SetDirection(tview.FlexRow).
+				AddItem(tview.NewFlex().SetDirection(tview.FlexRow).SetBorder(true), 0, 1, false).
 				AddItem(tview.NewFlex().SetDirection(tview.FlexColumn).
 					AddItem(tview.NewBox(), 2, 0, false).
-					AddItem(tview.NewButton("Cancel Task"), 0, 1, false).
-					AddItem(tview.NewBox(), 2, 0, false).
+					AddItem(tview.NewButton("Cancel Task").SetDisabled(true), 0, 1, false).
+					AddItem(tview.NewTextView().SetDynamicColors(true).SetMaxLines(200), 2, 0, false).
 					AddItem(tview.NewButton("Force Start").SetDisabled(true), 0, 1, false).
-					AddItem(tview.NewBox(), 2, 0, false),
-					1, 1, false), 0, 1, false)
+					AddItem(tview.NewBox(), 2, 0, false), 1, 1, false)
+			root.AddItem(detail, 0, 1, false)
+			notify := func(storage *models.DataStorage, ticket models.TicketData) {
+				logger.Debugf("ticket: %+v", ticket)
+				//logger.Debugf("storage: %+v", storage)
+			}
+			data.SetTicketChangeNotifyFunc(&notify)
 			functionPages.AddPage("status",
+				root,
+				true,
+				false)
+		}
+		{
+			root := tview.NewFlex()
+			functionPages.AddPage("setting",
 				root,
 				true,
 				false)
@@ -443,6 +444,8 @@ func main() {
 					functionPages.SwitchToPage("ticket")
 				case 3:
 					functionPages.SwitchToPage("status")
+				case 4:
+					functionPages.SwitchToPage("setting")
 				}
 			})
 			featureChoose.AddItem(list, 0, 1, true)
@@ -467,7 +470,7 @@ func main() {
 			logger.Errorf("Something went wrong when get logging status, %v", err)
 		}
 		if r.Login {
-			err, b := biliClient.RefreshNewBiliTicket()
+			err, b := biliClient.TryToRefreshNewBiliTicket()
 			if err != nil {
 				logger.Errorf("Something went wrong when refreshing bili-ticket, %v", err)
 			} else if !b {

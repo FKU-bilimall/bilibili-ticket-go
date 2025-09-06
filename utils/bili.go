@@ -80,6 +80,9 @@ func GenerateUUIDInfoc() string {
 
 func IsTicketOnSale(flag int) bool {
 	switch flag {
+	case 1:
+		// 未开售
+		return true
 	case 2:
 		// 预售中
 		return true

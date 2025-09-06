@@ -1,9 +1,9 @@
 package bili
 
 import (
-	"bilibili-ticket-go/bili/models/api"
-	r "bilibili-ticket-go/bili/models/return"
 	"bilibili-ticket-go/bili/token"
+	"bilibili-ticket-go/models/bili/api"
+	r "bilibili-ticket-go/models/bili/return"
 	"bilibili-ticket-go/models/errors"
 	"encoding/json"
 	"fmt"
@@ -190,4 +190,29 @@ func (c *Client) SubmitOrder(tk token.Generator, whenGenPToken time.Time, tokens
 		return err, -1, "", api.TicketOrderStruct{}
 	}
 	return nil, data.GetCode(), data.GetMessage(), data.Data
+}
+
+func (c *Client) GetBuyerNoSensitiveInfo() (error, []api.BuyerNoSensitiveStruct) {
+	query := c.getSignedParameterWithApp(map[string]any{
+		"actionKey":   "appkey",
+		"mobi_app":    "android",
+		"build":       c.appVersion.Build,
+		"mallVersion": c.appVersion.Build,
+		"device":      "phone",
+		"c_locale":    "zh-Hans_CN",
+		"s_locale":    "zh-Hans_CN",
+	})
+	res, err := c.http.R().SetQueryString(query.Encode()).Get("https://show.bilibili.com/api/ticket/buyerinfo/list")
+	if err != nil {
+		return err, nil
+	}
+	var data api.ShowApiDataRoot[api.BuyerNoSensitiveInfoApiStruct]
+	err = res.Unmarshal(&data)
+	if err != nil {
+		return err, nil
+	}
+	if err = data.CheckValid(); err != nil {
+		return err, nil
+	}
+	return nil, data.Data.Vo.List
 }

@@ -1,7 +1,7 @@
 package bili
 
 import (
-	"bilibili-ticket-go/bili/models/api"
+	"bilibili-ticket-go/models/bili/api"
 	"bilibili-ticket-go/utils/hashs"
 	"crypto/rand"
 	"crypto/rsa"
@@ -18,6 +18,15 @@ import (
 
 	"github.com/imroc/req/v3"
 )
+
+const publicKeyPEM = `
+-----BEGIN PUBLIC KEY-----
+MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDLgd2OAkcGVtoE3ThUREbio0Eg
+Uc/prcajMKXvkCKFCWhJYJcLkcM2DKKcSeFpD/j6Boy538YXnR6VhcuUJOhH2x71
+nzPjfdTcqMz7djHum0qSZA0AyCBDABUqCrfNgCiJ00Ra7GmRj+YCK1NJEuewlb40
+JNrRuoEUXpabUzGB8QIDAQAB
+-----END PUBLIC KEY-----
+`
 
 func (c *Client) CheckAndUpdateCookie() (error, bool) {
 	logger.Debug("Checking and updating cookie...")
@@ -195,7 +204,7 @@ func (c *Client) getCSRFFromCookie() string {
 	return ""
 }
 
-func (c *Client) RefreshNewBiliTicket() (error, bool) {
+func (c *Client) TryToRefreshNewBiliTicket() (error, bool) {
 	parsedURL, _ := url.Parse("https://www.bilibili.com/")
 	for _, cookie := range c.cookie.Cookies(parsedURL) {
 		if cookie.Name == "bili_ticket" {
@@ -261,16 +270,8 @@ func getAppLatestVersion() (error, *api.BiliAppVersionStruct) {
 }
 
 func getCorrespondPath(ts int64) (string, error) {
-	const publicKeyPEM = `
------BEGIN PUBLIC KEY-----
-MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDLgd2OAkcGVtoE3ThUREbio0Eg
-Uc/prcajMKXvkCKFCWhJYJcLkcM2DKKcSeFpD/j6Boy538YXnR6VhcuUJOhH2x71
-nzPjfdTcqMz7djHum0qSZA0AyCBDABUqCrfNgCiJ00Ra7GmRj+YCK1NJEuewlb40
-JNrRuoEUXpabUzGB8QIDAQAB
------END PUBLIC KEY-----
-`
 	pubKeyBlock, _ := pem.Decode([]byte(publicKeyPEM))
-	hash := sha256.New()
+	h := sha256.New()
 	random := rand.Reader
 	msg := []byte(fmt.Sprintf("refresh_%d", ts))
 	var pub *rsa.PublicKey
@@ -279,7 +280,7 @@ JNrRuoEUXpabUzGB8QIDAQAB
 		return "", parseErr
 	}
 	pub = pubInterface.(*rsa.PublicKey)
-	encryptedData, encryptErr := rsa.EncryptOAEP(hash, random, pub, msg, nil)
+	encryptedData, encryptErr := rsa.EncryptOAEP(h, random, pub, msg, nil)
 	if encryptErr != nil {
 		return "", encryptErr
 	}
