@@ -24,6 +24,8 @@ import (
 	"github.com/imroc/req/v3"
 	"github.com/rivo/tview"
 	"github.com/sirupsen/logrus"
+
+	_ "bilibili-ticket-go/captcha"
 )
 
 var (

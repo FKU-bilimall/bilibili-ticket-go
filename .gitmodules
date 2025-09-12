@@ -1,0 +1,3 @@
+[submodule "captcha/biliTicker"]
+	path = captcha/biliTicker
+	url = https://github.com/FKU-bilimall/biliTicker_gt

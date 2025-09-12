@@ -5,6 +5,7 @@ before:
   hooks:
     - go mod tidy
     - go install mvdan.cc/garble@latest
+    - cd captcha/biliTicker && cargo build --release
 
 builds:
   - id: bilibili-ticket-go-obf
@@ -18,7 +19,7 @@ builds:
       - arm64
     ldflags: -s -w -X "bilibili-ticket-go/global.GitCommit={{.ShortCommit}}" -X "bilibili-ticket-go/global.BuildTime={{.Timestamp}}" -X "bilibili-ticket-go/global.LoggerLevel=4"
     env:
-      - CGO_ENABLED=0
+      - CGO_ENABLED=1
     tool: garble
     binary: bilibili-ticket-go-obf
     command: "-tiny"
