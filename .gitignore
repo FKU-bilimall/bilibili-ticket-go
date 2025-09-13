@@ -11,3 +11,6 @@ __debug_bin*
 /models/*.onnx
 /test*
 /bili_ticket_gt*
+# Build artifacts and temporary files from build script
+/bin/
+/release/
