@@ -5,8 +5,8 @@ package captcha
 #cgo linux,arm64   LDFLAGS: -L${SRCDIR}/biliTicker/target/release -L${SRCDIR}/biliTicker/target/aarch64-unknown-linux-gnu/release -lbili_ticket_gt -lm -ldl
 #cgo darwin,amd64  LDFLAGS: -L${SRCDIR}/biliTicker/target/release -L${SRCDIR}/biliTicker/target/x86_64-apple-darwin/release -lbili_ticket_gt -lm -ldl
 #cgo darwin,arm64  LDFLAGS: -L${SRCDIR}/biliTicker/target/release -L${SRCDIR}/biliTicker/target/aarch64-apple-darwin/release -lbili_ticket_gt -lm -ldl
-#cgo windows,amd64 LDFLAGS: -L${SRCDIR}/biliTicker/target/release -L${SRCDIR}/biliTicker/target/aarch64-pc-windows-msvc/release -lbili_ticket_gt -lm
-#cgo windows,arm64 LDFLAGS: -L${SRCDIR}/biliTicker/target/release -L${SRCDIR}/biliTicker/target/x86_64-pc-windows-msvc/release -lbili_ticket_gt -lm
+#cgo windows,amd64 LDFLAGS: -L${SRCDIR}/biliTicker/target/release -L${SRCDIR}/biliTicker/target/x86_64-pc-windows-msvc/release -lbili_ticket_gt -lm
+#cgo windows,arm64 LDFLAGS: -L${SRCDIR}/biliTicker/target/release -L${SRCDIR}/biliTicker/target/aarch64-pc-windows-msvc/release -lbili_ticket_gt -lm
 
 #cgo CFLAGS: -I${SRCDIR}/biliTicker
 

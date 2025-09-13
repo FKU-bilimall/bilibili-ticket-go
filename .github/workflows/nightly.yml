@@ -45,6 +45,7 @@ jobs:
           path: |
             target/${{ matrix.target }}/release/*.so
             target/${{ matrix.target }}/release/*.dll
+            target/${{ matrix.target }}/release/*.dll.lib
             target/${{ matrix.target }}/release/*.dylib
 
       - name: Upload bindings.h
