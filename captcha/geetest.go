@@ -1,10 +1,13 @@
 package captcha
 
 /*
-#cgo windows  LDFLAGS: -L${SRCDIR}/biliTicker/target/release -lbili_ticket_gt -lm
-#cgo !windows LDFLAGS: -L${SRCDIR}/biliTicker/target/release -lbili_ticket_gt -lm -ldl
+#cgo CFLAGS: -I${SRCDIR}/biliTicker
 
-#include "./biliTicker/bindings.h"
+#cgo windows LDFLAGS: -L${SRCDIR}/biliTicker/target/release -lbili_ticket_gt -lm
+#cgo linux   LDFLAGS: -L${SRCDIR}/biliTicker/target/release -llibbili_ticket_gt -lm -ldl
+#cgo darwin  LDFLAGS: -L${SRCDIR}/biliTicker/target/release -llibbili_ticket_gt -lm -ldl
+
+#include "bindings.h"
 */
 import "C"
 import (

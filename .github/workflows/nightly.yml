@@ -7,7 +7,60 @@ on:
       - "master"
 
 jobs:
-  goreleaser:
+  rust:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+
+          - os: macos-latest
+            target: x86_64-apple-darwin
+
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: 'recursive'
+          repository: 'FKU-bilimall/biliTicker_gt'
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          target: ${{ matrix.target }}
+
+      - name: Build with cargo
+        run: cargo build --target ${{ matrix.target }} --release
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: |
+            target/${{ matrix.target }}/release/*.so
+            target/${{ matrix.target }}/release/*.dll
+            target/${{ matrix.target }}/release/*.dylib
+
+      - name: Upload bindings.h
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bindings.h
+          path: bindings.h
+
+  go:
+    strategy:
+      matrix:
+        targets: [x86_64-unknown-linux-gnu,x86_64-apple-darwin,x86_64-pc-windows-msvc]
+
+    needs:
+      - rust
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -15,23 +68,27 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Cache Go modules
-        uses: actions/cache@v4
+      - name: Download Rust Build Artifacts
+        uses: actions/download-artifact@v5
         with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: ${{ runner.os }}-go-btg
-          restore-keys: |
-            ${{ runner.os }}-go-btg
+          path: captcha/biliTicker/target/${{ matrix.targets }}/release
+          pattern: ${{ matrix.targets }}
+          merge-multiple: true
+
+      - name: Display structure of downloaded files
+        run: ls -R captcha/biliTicker/target/${{ matrix.targets }}/release
+
+      - name: Download bindings.h
+        uses: actions/download-artifact@v5
+        with:
+          path: captcha/biliTicker
+          pattern: bindings.h
 
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
           go-version: stable
-        
-      # More assembly might be required: Docker logins, GPG, etc.
-      # It all depends on your needs.
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
@@ -39,7 +96,7 @@ jobs:
           distribution: goreleaser
           # 'latest', 'nightly', or a semver
           args: --snapshot --clean
-          
+
       - name: Publish Nightly
         uses: marvinpinto/action-automatic-releases@latest
         with:
