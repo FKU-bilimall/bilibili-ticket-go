@@ -66,7 +66,6 @@ jobs:
 
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-
     needs:
       - rust
     runs-on: ${{ matrix.os }}
@@ -79,8 +78,8 @@ jobs:
       - name: Download Rust Build Artifacts
         uses: actions/download-artifact@v5
         with:
-          path: captcha/biliTicker/target/${{ matrix.targets }}/release
-          pattern: ${{ matrix.targets }}
+          path: captcha/biliTicker/target/${{ matrix.target }}/release
+          pattern: ${{ matrix.target }}
           merge-multiple: true
 
       - name: Download bindings.h
@@ -95,15 +94,13 @@ jobs:
           go-version: stable
 
       - name: Build and Package Go Binary
-        run: |
-          python3 build.py --target ${{ matrix.targets }} \
-            --deps captcha/biliTicker/target/${{ matrix.targets }}/release
+        run: python3 build.py --target ${{ matrix.target }} --deps captcha/biliTicker/target/${{ matrix.target }}/release
 
       - name: Upload Go Binary Zip
         uses: actions/upload-artifact@v4
         with:
-          name: build-${{ matrix.targets }}
-          path: output_*/bilibili-ticket-go_*.zip
+          name: build-${{ matrix.target }}
+          path: output/bilibili-ticket-go_*.zip
 
   release:
     needs: [go,rust]

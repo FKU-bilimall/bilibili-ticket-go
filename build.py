@@ -60,7 +60,9 @@ def zip_with_deps(output_path, deps_path=None, zip_dir=None, zip_name=None):
     zip_path = os.path.join(zip_dir, zip_name)
     lib_exts = [".so", ".dll", ".dylib"]
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-        # Only add dependency libraries, not the executable
+        # Add the executable to the zip
+        zipf.write(output_path, os.path.basename(output_path))
+        # Add dependency libraries
         if deps_path and os.path.isdir(deps_path):
             for file in os.listdir(deps_path):
                 abs_path = os.path.join(deps_path, file)
