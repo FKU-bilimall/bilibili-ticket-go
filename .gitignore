@@ -11,3 +11,5 @@ __debug_bin*
 /models/*.onnx
 /test*
 /bili_ticket_gt*
+/main*
+/output/

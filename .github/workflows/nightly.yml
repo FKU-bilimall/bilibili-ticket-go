@@ -57,11 +57,19 @@ jobs:
   go:
     strategy:
       matrix:
-        targets: [x86_64-unknown-linux-gnu,x86_64-apple-darwin,x86_64-pc-windows-msvc]
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+
+          - os: macos-latest
+            target: x86_64-apple-darwin
+
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
 
     needs:
       - rust
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -75,9 +83,6 @@ jobs:
           pattern: ${{ matrix.targets }}
           merge-multiple: true
 
-      - name: Display structure of downloaded files
-        run: ls -R captcha/biliTicker/target/${{ matrix.targets }}/release
-
       - name: Download bindings.h
         uses: actions/download-artifact@v5
         with:
@@ -89,13 +94,29 @@ jobs:
         with:
           go-version: stable
 
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+      - name: Build and Package Go Binary
+        run: |
+          python3 build.py --target ${{ matrix.targets }} \
+            --deps captcha/biliTicker/target/${{ matrix.targets }}/release
+
+      - name: Upload Go Binary Zip
+        uses: actions/upload-artifact@v4
         with:
-          # either 'goreleaser' (default) or 'goreleaser-pro'
-          distribution: goreleaser
-          # 'latest', 'nightly', or a semver
-          args: --snapshot --clean
+          name: build-${{ matrix.targets }}
+          path: output_*/bilibili-ticket-go_*.zip
+
+  release:
+    needs: [go,rust]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all Go Binary Zips
+        uses: actions/download-artifact@v5
+        with:
+          pattern: build-*
+          path: release_zips
+
+      - name: Display structure of release files
+        run: ls -R release_zips
 
       - name: Publish Nightly
         uses: marvinpinto/action-automatic-releases@latest
@@ -106,5 +127,4 @@ jobs:
           prerelease: true
           title: "Nightly updates"
           files: |
-            dist/*.zip
-            dist/checksums.txt
+            release_zips/**/*.zip

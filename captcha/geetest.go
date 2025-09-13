@@ -1,11 +1,14 @@
 package captcha
 
 /*
-#cgo CFLAGS: -I${SRCDIR}/biliTicker
+#cgo linux,amd64   LDFLAGS: -L${SRCDIR}/biliTicker/target/release -L${SRCDIR}/biliTicker/target/x86_64-unknown-linux-gnu/release -lbili_ticket_gt -lm -ldl
+#cgo linux,arm64   LDFLAGS: -L${SRCDIR}/biliTicker/target/release -L${SRCDIR}/biliTicker/target/aarch64-unknown-linux-gnu/release -lbili_ticket_gt -lm -ldl
+#cgo darwin,amd64  LDFLAGS: -L${SRCDIR}/biliTicker/target/release -L${SRCDIR}/biliTicker/target/x86_64-apple-darwin/release -lbili_ticket_gt -lm -ldl
+#cgo darwin,arm64  LDFLAGS: -L${SRCDIR}/biliTicker/target/release -L${SRCDIR}/biliTicker/target/aarch64-apple-darwin/release -lbili_ticket_gt -lm -ldl
+#cgo windows,amd64 LDFLAGS: -L${SRCDIR}/biliTicker/target/release -L${SRCDIR}/biliTicker/target/aarch64-pc-windows-msvc/release -lbili_ticket_gt -lm
+#cgo windows,arm64 LDFLAGS: -L${SRCDIR}/biliTicker/target/release -L${SRCDIR}/biliTicker/target/x86_64-pc-windows-msvc/release -lbili_ticket_gt -lm
 
-#cgo windows LDFLAGS: -L${SRCDIR}/biliTicker/target/release -lbili_ticket_gt -lm
-#cgo linux   LDFLAGS: -L${SRCDIR}/biliTicker/target/release -llibbili_ticket_gt -lm -ldl
-#cgo darwin  LDFLAGS: -L${SRCDIR}/biliTicker/target/release -llibbili_ticket_gt -lm -ldl
+#cgo CFLAGS: -I${SRCDIR}/biliTicker
 
 #include "bindings.h"
 */
