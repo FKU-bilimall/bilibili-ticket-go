@@ -31,3 +31,13 @@ func NewCaptchaTypeMismatchError(current, target string) *CaptchaTypeMismatchErr
 func (cte *CaptchaTypeMismatchError) Error() string {
 	return fmt.Sprintf("Captcha type error, current: %s, target: %s", cte.Current, cte.Target)
 }
+
+type CaptchaInstanceDestroyedError struct{}
+
+func NewCaptchaInstanceDestroyedError() *CaptchaInstanceDestroyedError {
+	return &CaptchaInstanceDestroyedError{}
+}
+
+func (cide *CaptchaInstanceDestroyedError) Error() string {
+	return "Captcha instance has been destroyed"
+}
