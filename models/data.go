@@ -1,24 +1,55 @@
 package models
 
 import (
+	"bilibili-ticket-go/models/enums"
 	"errors"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/spf13/viper"
 )
 
-type TicketData struct {
-	ExpireTimestamp int64 `mapstructure:"expireTimestamp"`
-	BuyerID         int64 `mapstructure:"buyerID"`
-	ProjectID       int64 `mapstructure:"projectID"`
-	SkuID           int64 `mapstructure:"skuID"`
-	ScreenID        int64 `mapstructure:"screenID"`
+type TicketEntry struct {
+	Expire    int64       `mapstructure:"expire"`
+	ProjectID int64       `mapstructure:"projectID"`
+	Project   string      `mapstructure:"projectName"`
+	SkuID     int64       `mapstructure:"skuID"`
+	Sku       string      `mapstructure:"skuName"`
+	ScreenID  int64       `mapstructure:"screenID"`
+	Screen    string      `mapstructure:"screenName"`
+	Buyer     TicketBuyer `mapstructure:"buyer"`
+}
+
+type TicketBuyer struct {
+	BuyerType enums.BuyerType `mapstructure:"type"`
+	ID        int64           `mapstructure:"ID,omitempty"`
+	Tel       string          `mapstructure:"tel,omitempty"`
+	Name      string          `mapstructure:"name"`
+}
+
+func (buyer TicketBuyer) Compare(a TicketBuyer) bool {
+	if buyer.BuyerType != a.BuyerType {
+		return false
+	}
+	if buyer.BuyerType == enums.Ordinary {
+		return buyer.Tel == a.Tel && buyer.Name == a.Name
+	} else {
+		return buyer.ID == a.ID
+	}
+}
+
+func (buyer TicketBuyer) String() string {
+	if buyer.BuyerType == enums.Ordinary {
+		return buyer.Name + " (" + buyer.Tel + ")"
+	} else {
+		return buyer.Name + " (ID: " + strconv.FormatInt(buyer.ID, 10) + ")"
+	}
 }
 
 type DataStorage struct {
-	TicketData           *[]TicketData `mapstructure:"ticket"`
-	ticketChangeCallback *func(storage *DataStorage, ticket TicketData)
+	TicketData           *[]TicketEntry `mapstructure:"ticket"`
+	ticketChangeCallback *func(storage *DataStorage, ticket TicketEntry)
 	viper                *viper.Viper
 	mutex                sync.Mutex
 }
@@ -29,7 +60,7 @@ func NewDataStorage() (*DataStorage, error) {
 	v.SetConfigType("json")
 	v.AddConfigPath(".")
 	v.SetDefault("ticket",
-		&[]TicketData{},
+		&[]TicketEntry{},
 	)
 	err := v.SafeWriteConfig()
 	if err != nil {
@@ -62,12 +93,12 @@ func (c *DataStorage) Save() error {
 	return nil
 }
 
-func (c *DataStorage) AddTicket(data TicketData) {
+func (c *DataStorage) AddTicket(data TicketEntry) {
 	ts := c.GetTickets()
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	for _, ticket := range ts {
-		if ticket.BuyerID == data.BuyerID && ticket.ProjectID == data.ProjectID && ticket.SkuID == data.SkuID && ticket.ScreenID == data.ScreenID {
+		if ticket.Buyer.Compare(data.Buyer) && ticket.ProjectID == data.ProjectID && ticket.SkuID == data.SkuID && ticket.ScreenID == data.ScreenID {
 			return
 		}
 	}
@@ -77,12 +108,12 @@ func (c *DataStorage) AddTicket(data TicketData) {
 	}
 }
 
-func (c *DataStorage) GetTickets() []TicketData {
+func (c *DataStorage) GetTickets() []TicketEntry {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	validTickets := make([]TicketData, 0)
+	validTickets := make([]TicketEntry, 0)
 	for _, ticket := range *c.TicketData {
-		if time.Unix(ticket.ExpireTimestamp, 0).After(time.Now()) {
+		if time.Unix(ticket.Expire, 0).After(time.Now()) {
 			validTickets = append(validTickets, ticket)
 		}
 	}
@@ -99,7 +130,7 @@ func (c *DataStorage) RemoveTicket(index int64) {
 	*c.TicketData = append((*c.TicketData)[:index], (*c.TicketData)[index+1:]...)
 }
 
-func (c *DataStorage) SetTicketChangeNotifyFunc(f *func(storage *DataStorage, ticket TicketData)) {
+func (c *DataStorage) SetTicketChangeNotifyFunc(f *func(storage *DataStorage, ticket TicketEntry)) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	c.ticketChangeCallback = f

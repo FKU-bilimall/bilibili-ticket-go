@@ -18,3 +18,10 @@ func (c CaptchaType) String() string {
 		return "Unknown"
 	}
 }
+
+type BuyerType int
+
+const (
+	Ordinary BuyerType = iota + 1
+	ForceRealName
+)

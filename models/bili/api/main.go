@@ -69,12 +69,14 @@ type WbiStruct struct {
 }
 
 type TicketProjectInformationStruct struct {
-	Id         int    `json:"id"`
-	Name       string `json:"name"`
-	Start      int64  `json:"start_time"`
-	End        int64  `json:"end_time"`
-	HotProject bool   `json:"hotProject"`
-	ScreenList []struct {
+	Id          int    `json:"id"`
+	Name        string `json:"name"`
+	Start       int64  `json:"start_time"`
+	End         int64  `json:"end_time"`
+	HotProject  bool   `json:"hotProject"`
+	NeedContact bool   `json:"need_contact"`
+	IdBind      int    `json:"id_bind"` // I think it's similar to the `NeedContact`. 1 is force Real Name Authentication. 0 is not.
+	ScreenList  []struct {
 		SaleFlag struct {
 			Number      int    `json:"number"`
 			DisplayName string `json:"display_name"`

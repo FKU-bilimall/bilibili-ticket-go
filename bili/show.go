@@ -38,11 +38,18 @@ func (c *Client) GetProjectInformation(projectID string) (error, *r.ProjectInfor
 			EndTime:   time.Time{},
 		}
 	}
+	var idbind = false
+	if data.Data.IdBind == 1 {
+		idbind = true
+	}
 	return nil, &r.ProjectInformation{
-		ProjectID:    projectID,
-		StartTime:    time.Unix(data.Data.End, 0),
-		EndTime:      time.Unix(data.Data.Start, 0),
-		IsHotProject: data.Data.HotProject,
+		ProjectID:       projectID,
+		StartTime:       time.Unix(data.Data.End, 0),
+		EndTime:         time.Unix(data.Data.Start, 0),
+		IsHotProject:    data.Data.HotProject,
+		IsNeedContact:   data.Data.NeedContact,
+		IsForceRealName: idbind,
+		ProjectName:     data.Data.Name,
 	}
 }
 

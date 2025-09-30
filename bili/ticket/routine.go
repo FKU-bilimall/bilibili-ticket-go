@@ -6,8 +6,8 @@ import (
 	"bilibili-ticket-go/global"
 	"bilibili-ticket-go/models"
 	"bilibili-ticket-go/models/bili/api"
-	"bilibili-ticket-go/models/bili/enums"
 	r "bilibili-ticket-go/models/bili/return"
+	"bilibili-ticket-go/models/enums"
 	"bilibili-ticket-go/utils"
 	"context"
 	"fmt"
@@ -22,14 +22,14 @@ type TicketRoutine struct {
 	mutex      sync.Mutex
 	client     *client.Client
 	buyer      r.BuyerInformation //if is "-1", doesn't use any buyer
-	ticket     models.TicketData
+	ticket     models.TicketEntry
 	ctx        context.Context
 	isRunning  bool
 	cancel     context.CancelFunc
 	loggerHook logrus.Hook
 }
 
-func NewTicketRoutine(client *client.Client, buyer r.BuyerInformation, ticket models.TicketData) *TicketRoutine {
+func NewTicketRoutine(client *client.Client, buyer r.BuyerInformation, ticket models.TicketEntry) *TicketRoutine {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &TicketRoutine{
 		client:    client,
@@ -65,7 +65,7 @@ func (tr *TicketRoutine) Stop() {
 	tr.isRunning = false
 }
 
-func run(client *client.Client, buyerID r.BuyerInformation, ticketData models.TicketData, interval time.Duration, ctx context.Context) {
+func run(client *client.Client, buyerID r.BuyerInformation, ticketData models.TicketEntry, interval time.Duration, ctx context.Context) {
 	var bid string
 	if buyerID.ContactInfo != nil {
 		bid = buyerID.ContactInfo.Tel

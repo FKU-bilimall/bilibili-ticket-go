@@ -48,7 +48,7 @@ func (c *Client) CheckAndUpdateCookie() (error, bool) {
 	oldCSRF := c.getCSRFFromCookie()
 	logger.Debugf("Old CSRF Token: %s", oldCSRF)
 	oldRefreshToken := c.refreshToken
-	cp, err := getCorrespondPath(time.Now().UnixMilli())
+	cp, err := getCorrespondPath(time.Now().UnixMilli() - 100)
 	if err != nil {
 		return err, false
 	}
@@ -150,7 +150,7 @@ func (c *Client) getRefreshCSRF(correspondPath string) (error, string) {
 		content := matches[1]
 		return nil, content
 	} else {
-		return errors.New("cannot Parser RefreshToken From HTML"), ""
+		return errors.New("cannot parse RefreshToken from HTML"), ""
 	}
 }
 

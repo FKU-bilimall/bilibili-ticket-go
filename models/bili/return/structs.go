@@ -28,10 +28,13 @@ type RequestTokenAndPToken struct {
 }
 
 type ProjectInformation struct {
-	ProjectID    string
-	StartTime    time.Time
-	EndTime      time.Time
-	IsHotProject bool
+	ProjectID       string
+	StartTime       time.Time
+	EndTime         time.Time
+	IsHotProject    bool
+	IsForceRealName bool
+	IsNeedContact   bool
+	ProjectName     string
 }
 
 type BuyerInformation struct {

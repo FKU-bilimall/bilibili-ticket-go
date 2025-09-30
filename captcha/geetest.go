@@ -14,7 +14,7 @@ package captcha
 */
 import "C"
 import (
-	"bilibili-ticket-go/models/bili/enums"
+	"bilibili-ticket-go/models/enums"
 	"bilibili-ticket-go/models/errors"
 	"strings"
 	"time"
