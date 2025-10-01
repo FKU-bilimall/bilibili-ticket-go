@@ -1,7 +1,8 @@
 package _return
 
 import (
-	"bilibili-ticket-go/models/bili/api"
+	"bilibili-ticket-go/models/enums"
+	"strconv"
 	"time"
 )
 
@@ -37,13 +38,28 @@ type ProjectInformation struct {
 	ProjectName     string
 }
 
-type BuyerInformation struct {
-	ForceRealNameBuyer *api.BuyerStruct
-	ContactInfo        *ContactInfoStruct
+type TicketBuyer struct {
+	BuyerType enums.BuyerType
+	ID        int64
+	Tel       string
+	Name      string
 }
 
-type ContactInfoStruct struct {
-	Tel      string `json:"tel"`
-	Uid      int64  `json:"uid"`
-	Username string `json:"username"`
+func (buyer TicketBuyer) Compare(a TicketBuyer) bool {
+	if buyer.BuyerType != a.BuyerType {
+		return false
+	}
+	if buyer.BuyerType == enums.Ordinary {
+		return buyer.Tel == a.Tel && buyer.Name == a.Name
+	} else {
+		return buyer.ID == a.ID
+	}
+}
+
+func (buyer TicketBuyer) String() string {
+	if buyer.BuyerType == enums.Ordinary {
+		return buyer.Name + " (" + buyer.Tel + ")"
+	} else {
+		return buyer.Name + " (ID: " + strconv.FormatInt(buyer.ID, 10) + ")"
+	}
 }

@@ -4,6 +4,7 @@ import (
 	"bilibili-ticket-go/bili/token"
 	"bilibili-ticket-go/models/bili/api"
 	r "bilibili-ticket-go/models/bili/return"
+	"bilibili-ticket-go/models/enums"
 	"bilibili-ticket-go/models/errors"
 	"encoding/json"
 	"fmt"
@@ -151,7 +152,7 @@ func (c *Client) GetConfirmInformation(tokens *r.RequestTokenAndPToken, projectI
 	return nil, &data.Data
 }
 
-func (c *Client) SubmitOrder(tk token.Generator, whenGenPToken time.Time, tokens *r.RequestTokenAndPToken, projectID string, ticket r.TicketSkuScreenID, buyer r.BuyerInformation) (error, int, string, api.TicketOrderStruct) {
+func (c *Client) SubmitOrder(tk token.Generator, whenGenPToken time.Time, tokens *r.RequestTokenAndPToken, projectID string, ticket r.TicketSkuScreenID, buyer interface{}, buyerType enums.BuyerType) (error, int, string, api.TicketOrderStruct) {
 	form := map[string]any{
 		"project_id":    projectID,
 		"screen_id":     strconv.FormatInt(ticket.ScreenID, 10),
@@ -164,11 +165,14 @@ func (c *Client) SubmitOrder(tk token.Generator, whenGenPToken time.Time, tokens
 		"sku_id":        strconv.FormatInt(ticket.SkuID, 10),
 		"requestSource": "pc-new",
 	}
-	if buyer.ForceRealNameBuyer != nil {
-		bs, _ := json.Marshal(buyer.ForceRealNameBuyer)
+
+	if buyerType == enums.ForceRealName {
+		bs, _ := json.Marshal(buyer)
 		form["buyer_info"] = string(bs)
-	} else if buyer.ContactInfo != nil {
-		form["contact_info"] = buyer.ContactInfo
+	} else if buyerType == enums.Ordinary {
+		buyer := buyer.(map[string]string)
+		form["tel"] = buyer["tel"]
+		form["buyer"] = buyer["name"]
 	} else {
 		return errors.NewTicketEmptyContactError(projectID, strconv.FormatInt(ticket.SkuID, 10), strconv.FormatInt(ticket.ScreenID, 10)), -1, "", api.TicketOrderStruct{}
 	}

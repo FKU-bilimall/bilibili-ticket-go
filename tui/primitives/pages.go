@@ -1,9 +1,10 @@
 package primitives
 
 import (
+	"reflect"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-	"reflect"
 )
 
 // page represents one page of a Pages object.

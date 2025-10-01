@@ -8,9 +8,11 @@ import (
 	"bilibili-ticket-go/models/bili/api"
 	r "bilibili-ticket-go/models/bili/return"
 	"bilibili-ticket-go/models/enums"
+	"bilibili-ticket-go/models/hooks"
 	"bilibili-ticket-go/utils"
 	"context"
 	"fmt"
+	"io"
 	"strconv"
 	"sync"
 	"time"
@@ -18,30 +20,48 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type TicketRoutine struct {
-	mutex      sync.Mutex
-	client     *client.Client
-	buyer      r.BuyerInformation //if is "-1", doesn't use any buyer
-	ticket     models.TicketEntry
-	ctx        context.Context
-	isRunning  bool
-	cancel     context.CancelFunc
-	loggerHook logrus.Hook
+type Routine struct {
+	mutex     sync.Mutex
+	client    *client.Client
+	buyer     r.TicketBuyer
+	ticket    models.TicketEntry
+	ctx       context.Context
+	isRunning bool
+	cancel    context.CancelFunc
+	logger    *logrus.Logger
 }
 
-func NewTicketRoutine(client *client.Client, buyer r.BuyerInformation, ticket models.TicketEntry) *TicketRoutine {
+func NewTicketRoutine(client *client.Client, buyer r.TicketBuyer, ticket models.TicketEntry, h []logrus.Hook) *Routine {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &TicketRoutine{
+	logger := logrus.New()
+	logger.SetOutput(io.Discard)
+	level, err := strconv.Atoi(global.LoggerLevel)
+	if err != nil {
+		level = 4
+	}
+	logger.SetLevel(logrus.Level(level))
+	for _, hook := range h {
+		logger.AddHook(hook)
+	}
+	tr := &Routine{
 		client:    client,
 		isRunning: false,
 		buyer:     buyer,
 		ticket:    ticket,
 		ctx:       ctx,
 		cancel:    cancel,
+		logger:    logger,
 	}
+	logger.AddHook(hooks.NewRoutineHandlerHook(func(i int, fields logrus.Fields) {
+		if i == enums.Success || i == enums.Failed || i == enums.Error {
+			tr.isRunning = false
+		}
+	}))
+	utils.RegisterLoggerFormater(logger)
+	return tr
 }
 
-func (tr *TicketRoutine) Start() {
+func (tr *Routine) Start() {
 	tr.mutex.Lock()
 	defer tr.mutex.Unlock()
 
@@ -50,10 +70,14 @@ func (tr *TicketRoutine) Start() {
 	}
 
 	tr.isRunning = true
-	go run(tr.client, tr.buyer, tr.ticket, 500*time.Millisecond, tr.ctx)
+	go run(tr.client, tr.buyer, tr.ticket, 500*time.Millisecond, tr.ctx, tr.logger)
 }
 
-func (tr *TicketRoutine) Stop() {
+func (tr *Routine) IsRunning() bool {
+	return tr.isRunning
+}
+
+func (tr *Routine) Stop() {
 	tr.mutex.Lock()
 	defer tr.mutex.Unlock()
 
@@ -65,15 +89,9 @@ func (tr *TicketRoutine) Stop() {
 	tr.isRunning = false
 }
 
-func run(client *client.Client, buyerID r.BuyerInformation, ticketData models.TicketEntry, interval time.Duration, ctx context.Context) {
-	var bid string
-	if buyerID.ContactInfo != nil {
-		bid = buyerID.ContactInfo.Tel
-	} else {
-		bid = strconv.FormatInt(buyerID.ForceRealNameBuyer.Id, 10)
-	}
+func run(client *client.Client, buyer r.TicketBuyer, ticketData models.TicketEntry, interval time.Duration, ctx context.Context, mainLog *logrus.Logger) {
 	pidString := strconv.FormatInt(ticketData.ProjectID, 10)
-	logger := utils.GetLogger(global.GetLogger(), fmt.Sprintf("%#X-%#X-%#X-%s", ticketData.ProjectID, ticketData.SkuID, ticketData.ScreenID, bid), nil)
+	logger := utils.GetLogger(mainLog, fmt.Sprintf("%s", ticketData.Hash()[:11]), nil)
 	err, info := client.GetProjectInformation(pidString)
 	if err != nil {
 		logger.WithField("status", enums.Error).WithError(err).Error("GetProjectInformation err")
@@ -107,7 +125,6 @@ func run(client *client.Client, buyerID r.BuyerInformation, ticketData models.Ti
 		logger.WithField("status", enums.Error).WithError(err).Errorf("GetRequestTokenAndPToken err: %v", err)
 		return
 	}
-	var buyer *api.BuyerStruct
 	var count uint16 = 0
 	for {
 		select {
@@ -115,10 +132,11 @@ func run(client *client.Client, buyerID r.BuyerInformation, ticketData models.Ti
 			return
 		default:
 			var (
-				err  error
-				code int
-				msg  string
-				to   api.TicketOrderStruct
+				err            error
+				code           int
+				msg            string
+				to             api.TicketOrderStruct
+				buyerInterface interface{}
 			)
 			if count >= 61 {
 				// 该换个新token去骗叔叔了
@@ -129,43 +147,56 @@ func run(client *client.Client, buyerID r.BuyerInformation, ticketData models.Ti
 				}
 				goto SLEEP
 			}
-			if buyer == nil && buyerID.ForceRealNameBuyer != nil {
+			if buyer.BuyerType == enums.Ordinary {
+				buyerInterface = map[string]string{
+					"tel":  buyer.Tel,
+					"name": buyer.Name,
+				}
+			} else if buyer.BuyerType == enums.ForceRealName {
 				err, confirm := client.GetConfirmInformation(tk, strconv.FormatInt(ticketData.ProjectID, 10))
 				if err != nil {
 					logger.WithField("status", enums.Error).WithError(err).Errorf("GetConfirmInformation err: %v", err)
 					goto SLEEP
 				}
 				for _, b := range confirm.BuyerList.List {
-					if b.Id == buyerID.ForceRealNameBuyer.Id {
-						buyer = &b
+					if b.Id == buyer.ID {
+						buyerInterface = b
 					}
 				}
-				if buyer == nil {
+				if buyerInterface == nil {
 					logger.WithField("status", enums.Error).WithError(err).Errorf("GetConfirmInformation buyer not found in project %d", ticketData.ProjectID)
 					return
 				}
 			}
-			err, code, msg, to = client.SubmitOrder(tokenGen, whenGenPtoken, tk, pidString, *ticket, r.BuyerInformation{
-				ForceRealNameBuyer: buyer,
-				ContactInfo:        buyerID.ContactInfo,
-			})
+			err, code, msg, to = client.SubmitOrder(tokenGen, whenGenPtoken, tk, pidString, *ticket, buyerInterface, buyer.BuyerType)
 			if err != nil {
 				logger.WithField("status", enums.Error).WithError(err).Errorf("SubmitOrder err: %v", err)
 				goto SLEEP
 			}
-			if (code == 0 || code == 100048 || code == 100079) && (to.OrderId != 0 && to.OrderCreateTime != 0) {
+			if (code == 0 || code == 100048 || code == 100079) && to.OrderId != 0 {
 				// 肘击成功
 				logger.WithFields(logrus.Fields{
 					"status": enums.Success,
 					"bili": logrus.Fields{
 						"code":    code,
 						"message": msg,
+						"order":   to.OrderId,
 					},
 				}).Infof("SubmitOrder success, orderID: %d", to.OrderId)
 				return
 			} else if code == 100034 {
 				// 价格不对捏
 				ticket.Price = to.PayMoney
+			} else if code == 100017 {
+				// 不可售
+				logger.WithFields(logrus.Fields{
+					"status": enums.Failed,
+					"bili": logrus.Fields{
+						"code":    code,
+						"message": msg,
+					},
+				}).Warnf("%s (%d)", msg, code)
+				return
 			}
 			logger.WithFields(logrus.Fields{
 				"status": enums.Pending,

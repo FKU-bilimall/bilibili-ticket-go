@@ -2,6 +2,7 @@ package main
 
 import (
 	client "bilibili-ticket-go/bili"
+	"bilibili-ticket-go/bili/ticket"
 	"bilibili-ticket-go/clock"
 	"bilibili-ticket-go/global"
 	"bilibili-ticket-go/models"
@@ -10,6 +11,7 @@ import (
 	"bilibili-ticket-go/models/cookiejar"
 	"bilibili-ticket-go/models/enums"
 	"bilibili-ticket-go/models/hooks"
+	"bilibili-ticket-go/scheduler"
 	"bilibili-ticket-go/tui/keyboard"
 	"bilibili-ticket-go/tui/primitives"
 	tutils "bilibili-ticket-go/tui/utils"
@@ -30,6 +32,11 @@ import (
 	_ "bilibili-ticket-go/captcha"
 )
 
+type ticketRoutineInformation struct {
+	routine  *ticket.Routine
+	logCache *hooks.LoggerCache
+}
+
 var (
 	logger         = utils.GetLogger(global.GetLogger(), "main", nil)
 	biliClient     *client.Client
@@ -43,11 +50,12 @@ var (
 		MaxSize:          100, // megabytes
 		MaxBackups:       30,  // backups
 		MaxAge:           7,   // days
-		Compress:         false,
+		Compression:      "none",
 		LocalTime:        true,
 		BackupTimeFormat: "20060102-150405",
 	}
-	ticketOngoingInstance = ""
+	ticketRoutineInfo = make(map[string]*ticketRoutineInformation)
+	schedulerManager  = scheduler.NewDynamicScheduler()
 )
 
 func init() {
@@ -86,18 +94,18 @@ func init() {
 }
 
 func main() {
-	bc, err := clock.GetBilibiliClockOffset()
-	if err != nil {
-		logger.Warn("Failed to get Bilibili clock offset: ", err)
-	} else {
-		logger.Trace("The Offset Between You and Bilibili Server: ", bc)
-	}
-	ac, err := clock.GetNTPClockOffset("ntp.aliyun.com")
-	if err != nil {
-		logger.Warn("Failed to get NTP clock offset: ", err)
-	} else {
-		logger.Trace("The Offset Between You and Aliyun NTP Server: ", ac)
-	}
+	/*	bc, err := clock.GetBilibiliClockOffset()
+		if err != nil {
+			logger.Warn("Failed to get Bilibili clock offset: ", err)
+		} else {
+			logger.Trace("The Offset Between You and Bilibili Server: ", bc)
+		}
+		ac, err := clock.GetNTPClockOffset("ntp.aliyun.com")
+		if err != nil {
+			logger.Warn("Failed to get NTP clock offset: ", err)
+		} else {
+			logger.Trace("The Offset Between You and Aliyun NTP Server: ", ac)
+		}*/
 	defer fileLogger.Close()
 	defer func() {
 		var ck = jar.AllPersistentEntries()
@@ -254,16 +262,23 @@ func main() {
 				projName       string
 			)
 			var (
-				ticketList        = tview.NewDropDown().SetLabel("Select Ticket: ").SetOptions([]string{"Nothing"}, nil)
-				buyerList         = tview.NewDropDown().SetLabel("Select Buyer: ").SetOptions([]string{"Nothing"}, nil)
-				buyerTelInput     = tview.NewInputField().SetLabel("Tel: ").SetFieldWidth(20).SetPlaceholder("Enter Tel")
-				buyerNameInput    = tview.NewInputField().SetLabel("Name: ").SetFieldWidth(20).SetPlaceholder("Enter Name")
+				ticketList        = primitives.NewDropDown()
+				buyerList         = primitives.NewDropDown()
+				buyerTelInput     = primitives.NewInputField()
+				buyerNameInput    = primitives.NewInputField()
 				buyerFlex         = tview.NewFlex().SetDirection(tview.FlexRow)
 				input             *tview.InputField
 				addToQueueBtn     *tview.Button
 				buyerSelectedFunc = func(text string, index int) {
 					buyer = buyers[index]
 					addToQueueBtn.SetDisabled(false)
+				}
+				buyerCheckFunc = func() {
+					if buyerNameInput.GetText() != "" && buyerTelInput.GetText() != "" {
+						addToQueueBtn.SetDisabled(false)
+					} else {
+						addToQueueBtn.SetDisabled(true)
+					}
 				}
 				buyerFlexResetFunc = func() {
 					buyerFlex.Clear()
@@ -273,34 +288,40 @@ func main() {
 					mutex.Lock()
 					defer mutex.Unlock()
 					selectedTicket = tickets[index]
-					err, res := biliClient.GetBuyerNoSensitiveInfo()
-					if err != nil {
-						logger.Errorf("GetBuyerNoSensitiveInfo error: %v", err)
-						tutils.PopupModal(fmt.Sprintf("Bilibili API Returned An Unexpected Value,\n%s", err), mainPages, map[string]func() bool{
-							"OK": func() bool { return true },
-						}, k)
-						return
+					if buyerType == enums.ForceRealName {
+						err, res := biliClient.GetBuyerNoSensitiveInfo()
+						if err != nil {
+							logger.Errorf("GetBuyerNoSensitiveInfo error: %v", err)
+							tutils.PopupModal(fmt.Sprintf("Bilibili API Returned An Unexpected Value,\n%s", err), mainPages, map[string]func() bool{
+								"OK": func() bool { return true },
+							}, k)
+							return
+						}
+						var buyerOptions []string
+						for _, buyer := range res {
+							buyerOptions = append(buyerOptions, fmt.Sprintf("%s-%s", buyer.Name, buyer.IdCard))
+						}
+						buyers = res
+						buyerList.SetOptions(buyerOptions, buyerSelectedFunc)
+						buyerList.SetDisabled(false)
+					} else if buyerType == enums.Ordinary {
+						buyerNameInput.SetDisabled(false)
+						buyerTelInput.SetDisabled(false)
 					}
-					var buyerOptions []string
-					for _, buyer := range res {
-						buyerOptions = append(buyerOptions, fmt.Sprintf("%s-%s", buyer.Name, buyer.IdCard))
-					}
-					buyers = res
-					buyerList.SetOptions(buyerOptions, buyerSelectedFunc)
-					buyerList.SetDisabled(false)
 				}
 				resetSelectionFunc = func() {
 					if projID == input.GetText() && projID != "" {
 						return
 					}
-					tickets = *new([]_return.TicketSkuScreenID)
-					_ = *new(_return.TicketSkuScreenID)
+					tickets = nil
+					selectedTicket = _return.TicketSkuScreenID{}
 					buyers = []api.BuyerNoSensitiveStruct{}
 					buyer = api.BuyerNoSensitiveStruct{}
-					_ = -1
 					ticketList.SetDisabled(true)
 					buyerList.SetDisabled(true)
 					addToQueueBtn.SetDisabled(true)
+					buyerNameInput.SetDisabled(true)
+					buyerTelInput.SetDisabled(true)
 					ticketList.SetOptions([]string{"Nothing"}, nil)
 					buyerList.SetOptions([]string{"Nothing"}, nil)
 					ticketList.SetCurrentOption(0)
@@ -350,6 +371,7 @@ func main() {
 					}
 					tickets = validTickets
 					if len(validTickets) == 0 {
+						buyerFlexResetFunc()
 						logger.Errorf("No valid tickets found")
 						tutils.PopupModal("No valid tickets found", mainPages, map[string]func() bool{
 							"OK": func() bool { return true },
@@ -368,13 +390,13 @@ func main() {
 						return
 					}
 					entry := models.TicketEntry{
-						ProjectID: pid,
-						Project:   projName,
-						Expire:    selectedTicket.SaleStat.End.Unix(),
-						SkuID:     selectedTicket.SkuID,
-						Sku:       selectedTicket.Desc,
-						ScreenID:  selectedTicket.ScreenID,
-						Screen:    selectedTicket.Name,
+						ProjectID:   pid,
+						ProjectName: projName,
+						Expire:      selectedTicket.SaleStat.End.Unix(),
+						SkuID:       selectedTicket.SkuID,
+						SkuName:     selectedTicket.Desc,
+						ScreenID:    selectedTicket.ScreenID,
+						ScreenName:  selectedTicket.Name,
 					}
 					if buyerType == enums.Ordinary {
 						if buyerNameInput.GetText() == "" || buyerTelInput.GetText() == "" {
@@ -383,7 +405,7 @@ func main() {
 							}, k)
 							return
 						}
-						entry.Buyer = models.TicketBuyer{
+						entry.Buyer = _return.TicketBuyer{
 							BuyerType: enums.Ordinary,
 							Tel:       buyerTelInput.GetText(),
 							Name:      buyerNameInput.GetText(),
@@ -395,7 +417,7 @@ func main() {
 							}, k)
 							return
 						}
-						entry.Buyer = models.TicketBuyer{
+						entry.Buyer = _return.TicketBuyer{
 							BuyerType: enums.ForceRealName,
 							ID:        buyer.Id,
 							Name:      buyer.Name,
@@ -408,11 +430,17 @@ func main() {
 				}
 			)
 			{
-				ticketList.SetCurrentOption(0)
-				buyerList.SetCurrentOption(0)
+				buyerTelInput.SetLabel("Tel: ").SetFieldWidth(20).SetPlaceholder("Enter Tel")
+				buyerNameInput.SetLabel("Name: ").SetFieldWidth(20).SetPlaceholder("Enter Name")
+				ticketList.SetLabel("Select Ticket: ").SetOptions([]string{"Nothing"}, nil).SetCurrentOption(0)
+				buyerList.SetLabel("Select Buyer: ").SetOptions([]string{"Nothing"}, nil).SetCurrentOption(0)
 				ticketList.SetDisabledStyle(tcell.StyleDefault.Background(tcell.ColorLightBlue).Foreground(tview.Styles.ContrastSecondaryTextColor)).SetDisabled(true)
 				buyerList.SetDisabledStyle(tcell.StyleDefault.Background(tcell.ColorLightBlue).Foreground(tview.Styles.ContrastSecondaryTextColor)).SetDisabled(true)
+				buyerNameInput.SetDisabledStyle(tcell.StyleDefault.Background(tcell.ColorLightBlue).Foreground(tview.Styles.ContrastSecondaryTextColor)).SetDisabled(true)
+				buyerTelInput.SetDisabledStyle(tcell.StyleDefault.Background(tcell.ColorLightBlue).Foreground(tview.Styles.ContrastSecondaryTextColor)).SetDisabled(true)
 				buyerFlexResetFunc()
+				buyerNameInput.SetChangedFunc(func(text string) { buyerCheckFunc() })
+				buyerTelInput.SetChangedFunc(func(text string) { buyerCheckFunc() })
 			}
 			root := tview.NewFlex().SetDirection(tview.FlexRow)
 			input = tview.NewInputField().
@@ -446,27 +474,69 @@ func main() {
 			functionPages.AddPage("ticket", root, true, false)
 		}
 		{
-			root := tview.NewFlex()
+			var (
+				current = -1
+				hash    []string
+			)
+			root := primitives.NewPages()
+			root.SetBorder(true).SetTitle("TICKET LIST")
 			list := tview.NewList()
-			listFlex := tview.NewFlex().AddItem(list, 0, 1, true)
-			listFlex.SetTitle("Pending List").SetBorder(true)
-			root.AddItem(listFlex, 30, 0, false)
+			logs := tview.NewTextView().SetMaxLines(200).SetDynamicColors(true)
+			ANSI := tview.ANSIWriter(logs)
 			detail := tview.NewFlex().SetDirection(tview.FlexRow).
-				AddItem(tview.NewFlex().SetDirection(tview.FlexRow).SetBorder(true), 0, 1, false).
+				AddItem(tview.NewFlex().AddItem(logs, 0, 1, true).SetDirection(tview.FlexRow).SetBorder(true), 0, 1, false).
 				AddItem(tview.NewFlex().SetDirection(tview.FlexColumn).
 					AddItem(tview.NewBox(), 2, 0, false).
-					AddItem(tview.NewButton("Cancel Task").SetDisabled(true), 0, 1, false).
+					AddItem(tview.NewButton("Exit").SetSelectedFunc(func() {
+						root.SwitchToPage("list")
+						root.SetTitle("TICKET LIST")
+					}), 0, 1, false).
+					AddItem(tview.NewBox(), 2, 0, false).
+					AddItem(tview.NewButton("Cancel Task").SetSelectedFunc(func() {
+						tutils.PopupModal("Are you sure delete this task?", mainPages, map[string]func() bool{
+							"Yes": func() bool {
+								root.SwitchToPage("list")
+								root.SetTitle("TICKET LIST")
+								if current != -1 {
+									data.RemoveTicket(int64(current))
+								}
+								return true
+							},
+							"No": func() bool { return true },
+						}, k)
+					}), 0, 1, false).
 					AddItem(tview.NewTextView().SetDynamicColors(true).SetMaxLines(200), 2, 0, false).
-					AddItem(tview.NewButton("Force Start").SetDisabled(true), 0, 1, false).
+					AddItem(tview.NewButton("Force Start").SetSelectedFunc(func() {
+						if !ticketRoutineInfo[hash[current]].routine.IsRunning() {
+							ticketRoutineInfo[hash[current]].routine.Start()
+						}
+					}), 0, 1, false).
 					AddItem(tview.NewBox(), 2, 0, false), 1, 1, false)
-			root.AddItem(detail, 0, 1, false)
-			notify := func(storage *models.DataStorage, ticket models.TicketEntry) {
+			notify := func(storage *models.DataStorage, t models.TicketEntry) {
 				list.Clear()
-				logger.Debugf("ticket: %+v", ticket)
-				//for i, ticket := range storage.GetTickets() {
-				//list.AddItem(fmt.Sprintf("%d.%d(%d)", i+1, ticket.ProjectID, ticket.SkuID), fmt.Sprintf(" [%d]{%d}", ticket.ScreenID, ticket.Buyer.String()), 0, nil)
-				//}
-				//logger.Debugf("storage: %+v", storage)
+				hash = []string{}
+				logger.Debugf("t: %+v", t)
+				for i, t := range storage.GetTickets() {
+					h := t.Hash()
+					hash = append(hash, h)
+					list.AddItem(fmt.Sprintf("%d.%s(%s)", i+1, t.ProjectName, t.SkuName), fmt.Sprintf(" [%s]{%s}(%s)", t.ScreenName, t.Buyer.Name, h[0:8]), 0, nil)
+					if _, exists := ticketRoutineInfo[h]; exists {
+						continue
+					}
+					buy := t.Buyer
+					cache := hooks.NewLoggerCache(200, nil)
+					loghooks := []logrus.Hook{cache}
+					ticketRoutineInfo[h] = &ticketRoutineInformation{
+						routine:  ticket.NewTicketRoutine(biliClient, buy, t, loghooks),
+						logCache: cache,
+					}
+					schedulerManager.AddTask(h, time.Unix(t.Expire, 0), func() {
+						if !ticketRoutineInfo[hash[current]].routine.IsRunning() {
+							ticketRoutineInfo[hash[current]].routine.Start()
+						}
+					})
+				}
+				logger.Debugf("storage: %+v", storage)
 			}
 			data.SetTicketChangeNotifyFunc(&notify)
 			notify(data, models.TicketEntry{})
@@ -474,12 +544,24 @@ func main() {
 				root,
 				true,
 				false)
+			list.SetSelectedFunc(func(i int, _ string, _ string, _ rune) {
+				if current != -1 {
+					ticketRoutineInfo[hash[current]].logCache.SetOutput(nil)
+				}
+				current = i
+				logs.Clear()
+				ticketRoutineInfo[hash[current]].logCache.SetOutput(ANSI)
+				root.SwitchToPage("detail")
+				root.SetTitle("DETAIL")
+			})
+			root.AddPage("list", list, true, true)
+			root.AddPage("detail", detail, true, false)
 		}
 		{
 			root := tview.NewFlex()
 			form := tview.NewForm()
 			form.AddButton("Save", nil).
-				AddButton("Quit", func() {
+				AddButton("Reset", func() {
 					app.Stop()
 				})
 			root.AddItem(form, 0, 1, true)
@@ -543,6 +625,17 @@ func main() {
 			} else {
 				logger.Info("Bili-ticket refreshed successfully.")
 			}
+		}
+	}()
+	//offest sync
+	go func() {
+		for {
+			ac, err := clock.GetNTPClockOffset("ntp.aliyun.com")
+			if err != nil {
+				continue
+			}
+			schedulerManager.SetGlobalOffset(ac)
+			time.Sleep(60 * time.Second) //setting
 		}
 	}()
 	if err := app.SetRoot(mainPages, true).Run(); err != nil {
