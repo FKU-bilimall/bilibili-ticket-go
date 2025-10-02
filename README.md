@@ -1,5 +1,7 @@
 # Bilibili-ticket-go 
 ## 又一个TUI Bilibili会员购购票辅助工具
+### [Telegram Group](https://t.me/itsbiliticketgo)
+### 目前还在测试阶段, 可能会有未知的BUG
 ### 黄牛 / 收费代抢４０００＋
 ## 免责声明
 
