@@ -7,54 +7,6 @@ on:
       - "master"
 
 jobs:
-  rust:
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-
-          - os: macos-latest
-            target: x86_64-apple-darwin
-
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-          submodules: 'recursive'
-          repository: 'FKU-bilimall/biliTicker_gt'
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
-          target: ${{ matrix.target }}
-
-      - name: Build with cargo
-        run: cargo build --target ${{ matrix.target }} --release
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.target }}
-          path: |
-            target/${{ matrix.target }}/release/*.so
-            target/${{ matrix.target }}/release/*.dll
-            target/${{ matrix.target }}/release/*.dll.lib
-            target/${{ matrix.target }}/release/*.dylib
-
-      - name: Upload bindings.h
-        if: matrix.target == 'x86_64-unknown-linux-gnu'
-        uses: actions/upload-artifact@v4
-        with:
-          name: bindings.h
-          path: bindings.h
-
   go:
     strategy:
       matrix:
@@ -67,8 +19,6 @@ jobs:
 
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-    needs:
-      - rust
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
@@ -77,17 +27,28 @@ jobs:
           fetch-depth: 0
 
       - name: Download Rust Build Artifacts
-        uses: actions/download-artifact@v5
+        uses: robinraju/release-downloader@v1.10
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          path: captcha/biliTicker/target/${{ matrix.target }}/release
-          pattern: ${{ matrix.target }}
-          merge-multiple: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          preRelease: true
+          tag: "nightly"
+          repository: "FKU-bilimall/biliTicker_gt"
+          fileName: "*"
+          out-file-path: captcha/biliTicker/target/${{ matrix.target }}/release
 
-      - name: Download bindings.h
-        uses: actions/download-artifact@v5
+      - name: Download release
+        uses: robinraju/release-downloader@v1.10
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          path: captcha/biliTicker
-          pattern: bindings.h
+          token: ${{ secrets.GITHUB_TOKEN }}
+          preRelease: true
+          tag: "nightly"
+          repository: "FKU-bilimall/biliTicker_gt"
+          fileName: "bindings.h"
+          out-file-path: "captcha/biliTicker/"
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -104,7 +65,7 @@ jobs:
           path: output/bilibili-ticket-go_*.zip
 
   release:
-    needs: [go,rust]
+    needs: [go]
     runs-on: ubuntu-latest
     steps:
       - name: Download all Go Binary Zips
