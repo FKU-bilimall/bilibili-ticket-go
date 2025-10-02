@@ -14,6 +14,7 @@ import (
 
 type TicketEntry struct {
 	Expire      int64
+	Start       int64
 	ProjectID   int64
 	ProjectName string
 	SkuID       int64
@@ -24,15 +25,19 @@ type TicketEntry struct {
 }
 
 func (t TicketEntry) String() string {
-	return t.ProjectName + " - " + t.SkuName + " - " + t.ScreenName + " - " + t.Buyer.String() + " (Expire: " + time.Unix(t.Expire, 0).Format("2006-01-02 15:04:05") + ")"
+	return t.ProjectName + " - " + t.SkuName + " - " + t.ScreenName + " - " + t.Buyer.String() + " (Expire: " + time.Unix(t.Expire, 0).Format("2006-01-02 15:04:05") + ";Start: " + time.Unix(t.Start, 0).Format("2006-01-02 15:04:05") + ")"
 }
 
 func (t TicketEntry) Hash() string {
 	str := fmt.Sprintf(
-		"Buyer:BuyerType:%d,ID:%d,Name:%s,Tel:%s|Expire:%d|ProjectID:%d|ScreenID:%d|SkuID:%d",
-		t.Buyer.BuyerType, t.Buyer.ID, t.Buyer.Name, t.Buyer.Tel, t.Expire, t.ProjectID, t.ScreenID, t.SkuID)
+		"Buyer:BuyerType:%d,ID:%d,Name:%s,Tel:%s|Expire:%d|Start:%d|ProjectID:%d|ScreenID:%d|SkuID:%d",
+		t.Buyer.BuyerType, t.Buyer.ID, t.Buyer.Name, t.Buyer.Tel, t.Expire, t.Start, t.ProjectID, t.ScreenID, t.SkuID)
 	hash := sha256.Sum256([]byte(str))
 	return hex.EncodeToString(hash[:])
+}
+
+func (t TicketEntry) Valid() bool {
+	return t.Expire > time.Now().Unix() && t.ProjectID > 0 && t.SkuID > 0 && t.ScreenID > 0 && t.Buyer.Valid()
 }
 
 type DataStorage struct {
@@ -111,11 +116,11 @@ func (c *DataStorage) GetTickets() []TicketEntry {
 	return validTickets
 }
 
-func (c *DataStorage) RemoveTicket(index int64) {
+func (c *DataStorage) RemoveTicket(index int64) bool {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	if index < 0 || index >= int64(len(c.TicketData)) {
-		return
+		return false
 	}
 	old := c.TicketData[index]
 	c.TicketData = append((c.TicketData)[:index], (c.TicketData)[index+1:]...)
@@ -124,8 +129,26 @@ func (c *DataStorage) RemoveTicket(index int64) {
 			(*c.ticketChangeCallback)(c, old)
 		}()
 	}
+	return true
 }
 
+func (c *DataStorage) RemoveTicketByHash(hash string) bool {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	for i, ticket := range c.TicketData {
+		if ticket.Hash() == hash {
+			old := ticket
+			c.TicketData = append((c.TicketData)[:i], (c.TicketData)[i+1:]...)
+			if c.ticketChangeCallback != nil {
+				go func() {
+					(*c.ticketChangeCallback)(c, old)
+				}()
+			}
+			return true
+		}
+	}
+	return false
+}
 func (c *DataStorage) SetTicketChangeNotifyFunc(f *func(storage *DataStorage, ticket TicketEntry)) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()

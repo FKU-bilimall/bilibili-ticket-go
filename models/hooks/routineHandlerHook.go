@@ -37,7 +37,7 @@ func (h *RoutineHandlerHook) Fire(entry *logrus.Entry) error {
 		bili = logrus.Fields{}
 	}
 	if h.callback != nil {
-		h.callback(val, bili)
+		go h.callback(val, bili)
 	}
 	return nil
 }

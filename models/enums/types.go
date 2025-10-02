@@ -1,5 +1,7 @@
 package enums
 
+import "strings"
+
 type CaptchaType int
 
 const (
@@ -25,3 +27,19 @@ const (
 	Ordinary BuyerType = iota + 1
 	ForceRealName
 )
+
+type NotificationType int
+
+const (
+	None NotificationType = iota
+	Gotify
+)
+
+func ConvertNotificationType(s string) NotificationType {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "gotify":
+		return Gotify
+	default:
+		return None
+	}
+}

@@ -19,3 +19,17 @@ func NewTicketEmptyContactError(project string, sku string, screen string) *Tick
 func (ta *TicketEmptyContactError) Error() string {
 	return fmt.Sprintf("The ticket %s-%s-%s contact is empty", ta.ProjectID, ta.SkuID, ta.ScreenID)
 }
+
+type RoutineCreateError struct {
+	Message string
+}
+
+func (e *RoutineCreateError) Error() string {
+	return e.Message
+}
+
+func NewRoutineCreateError(message string) error {
+	return &RoutineCreateError{
+		Message: message,
+	}
+}

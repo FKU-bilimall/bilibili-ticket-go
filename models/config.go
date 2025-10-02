@@ -16,9 +16,15 @@ type Bilibili struct {
 	Fingerprint  bili.Fingerprint
 }
 
+type Notification struct {
+	Type     string
+	Endpoint string
+	Token    string
+}
 type TicketSetting struct {
-	AutoStartBuying bool   `mapstructure:"autoStartBuying"`
-	NtpServer       string `mapstructure:"ntpServer"`
+	AutoStartBuying bool
+	NtpServer       string
+	Notification    Notification
 }
 
 type Configuration struct {
@@ -41,6 +47,9 @@ func NewConfiguration() (*Configuration, error) {
 		&TicketSetting{
 			AutoStartBuying: false,
 			NtpServer:       "ntp.aliyun.com",
+			Notification: Notification{
+				Type: "none",
+			},
 		})
 	err := v.SafeWriteConfig()
 	if err != nil {

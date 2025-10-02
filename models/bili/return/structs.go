@@ -45,6 +45,15 @@ type TicketBuyer struct {
 	Name      string
 }
 
+func (buyer TicketBuyer) Valid() bool {
+	if buyer.BuyerType == enums.Ordinary {
+		return buyer.Tel != "" && buyer.Name != ""
+	}
+	if buyer.BuyerType == enums.ForceRealName {
+		return buyer.ID > 0
+	}
+	return false
+}
 func (buyer TicketBuyer) Compare(a TicketBuyer) bool {
 	if buyer.BuyerType != a.BuyerType {
 		return false

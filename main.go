@@ -11,12 +11,14 @@ import (
 	"bilibili-ticket-go/models/cookiejar"
 	"bilibili-ticket-go/models/enums"
 	"bilibili-ticket-go/models/hooks"
+	"bilibili-ticket-go/notify"
 	"bilibili-ticket-go/scheduler"
 	"bilibili-ticket-go/tui/keyboard"
 	"bilibili-ticket-go/tui/primitives"
 	tutils "bilibili-ticket-go/tui/utils"
 	"bilibili-ticket-go/utils"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -54,13 +56,15 @@ var (
 		LocalTime:        true,
 		BackupTimeFormat: "20060102-150405",
 	}
-	ticketRoutineInfo = make(map[string]*ticketRoutineInformation)
-	schedulerManager  = scheduler.NewDynamicScheduler()
+	ticketRoutineInfo               = make(map[string]*ticketRoutineInformation)
+	successTicketTask               = make(map[string]bool)
+	schedulerManager                = scheduler.NewDynamicScheduler()
+	notifyManager     notify.Notify = nil
 )
 
 func init() {
 	global.GetLogger().AddHook(hooks.NewLogFileRotateHook(fileLogger))
-	if !utils.IsFileEmpty("logs/latest.log") {
+	if st, err := os.Stat("logs/latest.log"); !utils.IsFileEmpty("logs/latest.log") && err != nil && st.Size() >= int64(fileLogger.MaxSize)*1000*1000 {
 		fileLogger.Rotate()
 	}
 	loggerTextview = tview.NewTextView()
@@ -91,6 +95,12 @@ func init() {
 	conf.Bilibili.BUVID = biliClient.GetBUVID()
 	conf.Bilibili.Fingerprint = biliClient.GetFingerprint()
 	conf.Bilibili.InfocUUID = biliClient.GetInfocUUID()
+	switch enums.ConvertNotificationType(conf.Ticket.Notification.Type) {
+	case enums.None:
+		notifyManager = nil
+	case enums.Gotify:
+		notifyManager = notify.NewGotify(conf.Ticket.Notification.Token, conf.Ticket.Notification.Endpoint)
+	}
 }
 
 func main() {
@@ -119,7 +129,20 @@ func main() {
 		conf.Save()
 	}()
 	defer func() {
+		for s, b := range successTicketTask {
+			if b {
+				data.RemoveTicketByHash(s)
+			}
+		}
 		data.Save()
+	}()
+	defer func() {
+		if p := recover(); p != nil {
+			if app != nil {
+				app.Stop()
+			}
+			panic(p)
+		}
 	}()
 	app = tview.NewApplication().EnableMouse(true).EnablePaste(true)
 	mainPages := primitives.NewPages()
@@ -393,6 +416,7 @@ func main() {
 						ProjectID:   pid,
 						ProjectName: projName,
 						Expire:      selectedTicket.SaleStat.End.Unix(),
+						Start:       selectedTicket.SaleStat.Start.Unix(),
 						SkuID:       selectedTicket.SkuID,
 						SkuName:     selectedTicket.Desc,
 						ScreenID:    selectedTicket.ScreenID,
@@ -481,10 +505,15 @@ func main() {
 			root := primitives.NewPages()
 			root.SetBorder(true).SetTitle("TICKET LIST")
 			list := tview.NewList()
-			logs := tview.NewTextView().SetMaxLines(200).SetDynamicColors(true)
-			ANSI := tview.ANSIWriter(logs)
+			logs := tview.NewTextView().SetMaxLines(200).SetDynamicColors(true).SetChangedFunc(func() {
+				if app != nil {
+					app.Draw()
+				}
+			})
+			logFlex := tview.NewFlex().AddItem(logs, 0, 1, true).SetDirection(tview.FlexRow)
+			logFlex.SetBorder(true)
 			detail := tview.NewFlex().SetDirection(tview.FlexRow).
-				AddItem(tview.NewFlex().AddItem(logs, 0, 1, true).SetDirection(tview.FlexRow).SetBorder(true), 0, 1, false).
+				AddItem(logFlex, 0, 1, false).
 				AddItem(tview.NewFlex().SetDirection(tview.FlexColumn).
 					AddItem(tview.NewBox(), 2, 0, false).
 					AddItem(tview.NewButton("Exit").SetSelectedFunc(func() {
@@ -498,6 +527,9 @@ func main() {
 								root.SwitchToPage("list")
 								root.SetTitle("TICKET LIST")
 								if current != -1 {
+									if ticketRoutineInfo[hash[current]].routine.IsRunning() {
+										ticketRoutineInfo[hash[current]].routine.Stop()
+									}
 									data.RemoveTicket(int64(current))
 								}
 								return true
@@ -507,27 +539,38 @@ func main() {
 					}), 0, 1, false).
 					AddItem(tview.NewTextView().SetDynamicColors(true).SetMaxLines(200), 2, 0, false).
 					AddItem(tview.NewButton("Force Start").SetSelectedFunc(func() {
-						if !ticketRoutineInfo[hash[current]].routine.IsRunning() {
-							ticketRoutineInfo[hash[current]].routine.Start()
+						successTicketTask[hash[current]] = false
+						if ticketRoutineInfo[hash[current]].routine.IsRunning() {
+							ticketRoutineInfo[hash[current]].routine.Stop()
 						}
+						ticketRoutineInfo[hash[current]].routine.Start()
 					}), 0, 1, false).
-					AddItem(tview.NewBox(), 2, 0, false), 1, 1, false)
+					AddItem(tview.NewBox(), 2, 0, false), 1, 0, false)
+			ANSI := tview.ANSIWriter(logs)
 			notify := func(storage *models.DataStorage, t models.TicketEntry) {
 				list.Clear()
 				hash = []string{}
 				logger.Debugf("t: %+v", t)
 				for i, t := range storage.GetTickets() {
 					h := t.Hash()
-					hash = append(hash, h)
-					list.AddItem(fmt.Sprintf("%d.%s(%s)", i+1, t.ProjectName, t.SkuName), fmt.Sprintf(" [%s]{%s}(%s)", t.ScreenName, t.Buyer.Name, h[0:8]), 0, nil)
 					if _, exists := ticketRoutineInfo[h]; exists {
 						continue
 					}
-					buy := t.Buyer
 					cache := hooks.NewLoggerCache(200, nil)
-					loghooks := []logrus.Hook{cache}
+					handler := hooks.NewRoutineHandlerHook(func(i int, fields logrus.Fields) {
+						if i == enums.Success || i == enums.Failed || i == enums.Error {
+							schedulerManager.RemoveTask(h)
+							successTicketTask[h] = true
+						}
+					})
+					loghooks := []logrus.Hook{cache, handler}
+					err, routine := ticket.NewTicketRoutine(biliClient, t, loghooks, notifyManager)
+					if err != nil {
+						logger.Errorf("Failed to create ticket routine[hash:%s]: %v", h[:11], err)
+						continue
+					}
 					ticketRoutineInfo[h] = &ticketRoutineInformation{
-						routine:  ticket.NewTicketRoutine(biliClient, buy, t, loghooks),
+						routine:  routine,
 						logCache: cache,
 					}
 					schedulerManager.AddTask(h, time.Unix(t.Expire, 0), func() {
@@ -535,6 +578,8 @@ func main() {
 							ticketRoutineInfo[hash[current]].routine.Start()
 						}
 					})
+					hash = append(hash, h)
+					list.AddItem(fmt.Sprintf("%d.%s(%s)", i+1, t.ProjectName, t.SkuName), fmt.Sprintf(" [%s]{%s}(%s)", t.ScreenName, t.Buyer.Name, h[0:9]), 0, nil)
 				}
 				logger.Debugf("storage: %+v", storage)
 			}
@@ -550,9 +595,27 @@ func main() {
 				}
 				current = i
 				logs.Clear()
+				for _, s := range ticketRoutineInfo[hash[current]].logCache.GetEntries() {
+					ANSI.Write([]byte(s))
+				}
+				logs.ScrollToEnd()
 				ticketRoutineInfo[hash[current]].logCache.SetOutput(ANSI)
 				root.SwitchToPage("detail")
 				root.SetTitle("DETAIL")
+			})
+			list.SetDrawFunc(func(screen tcell.Screen, x int, y int, width int, height int) (int, int, int, int) {
+				if list.GetItemCount() == 0 {
+					// Draw a horizontal line across the middle of the box.
+					centerY := y + height/2
+					for cx := x + 1; cx < x+width-1; cx++ {
+						screen.SetContent(cx, centerY, tview.BoxDrawingsLightHorizontal, nil, tcell.StyleDefault.Foreground(tcell.ColorWhite))
+					}
+
+					// Write som text along the horizontal line.
+					tview.Print(screen, " Empty List ", x+1, centerY, width-2, tview.AlignCenter, tcell.ColorYellow)
+				}
+				// Space for other content.
+				return x, y, width, height
 			})
 			root.AddPage("list", list, true, true)
 			root.AddPage("detail", detail, true, false)

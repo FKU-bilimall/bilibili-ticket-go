@@ -8,30 +8,45 @@ import (
 	"bilibili-ticket-go/models/bili/api"
 	r "bilibili-ticket-go/models/bili/return"
 	"bilibili-ticket-go/models/enums"
+	"bilibili-ticket-go/models/errors"
 	"bilibili-ticket-go/models/hooks"
+	"bilibili-ticket-go/notify"
 	"bilibili-ticket-go/utils"
 	"context"
+	errors2 "errors"
 	"fmt"
 	"io"
 	"strconv"
 	"sync"
 	"time"
 
+	"github.com/DeRuina/timberjack"
 	"github.com/sirupsen/logrus"
 )
 
 type Routine struct {
-	mutex     sync.Mutex
+	mutex     sync.RWMutex
 	client    *client.Client
 	buyer     r.TicketBuyer
 	ticket    models.TicketEntry
 	ctx       context.Context
 	isRunning bool
 	cancel    context.CancelFunc
-	logger    *logrus.Logger
+	logger    *logrus.Entry
 }
 
-func NewTicketRoutine(client *client.Client, buyer r.TicketBuyer, ticket models.TicketEntry, h []logrus.Hook) *Routine {
+func NewTicketRoutine(client *client.Client, ticket models.TicketEntry, h []logrus.Hook, notify notify.Notify) (error, *Routine) {
+	if !ticket.Valid() {
+		return errors.NewRoutineCreateError("ticket data is invalid"), nil
+	}
+	if client == nil {
+		return errors.NewRoutineCreateError("bili-client is nil"), nil
+	}
+	err, info := client.GetLoginStatus()
+	if err != nil {
+		return errors2.Join(errors.NewRoutineCreateError("get login status error"), err), nil
+	}
+	hash := ticket.Hash()
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := logrus.New()
 	logger.SetOutput(io.Discard)
@@ -40,58 +55,75 @@ func NewTicketRoutine(client *client.Client, buyer r.TicketBuyer, ticket models.
 		level = 4
 	}
 	logger.SetLevel(logrus.Level(level))
+	fileLogger := &timberjack.Logger{
+		Filename:    "logs/tickets/" + hash[0:11] + ".log",
+		MaxSize:     1e5, // megabytes
+		MaxBackups:  0,   // backups
+		MaxAge:      7,   // days
+		Compression: "none",
+		LocalTime:   true,
+	}
+	logger.AddHook(hooks.NewLogFileRotateHook(fileLogger))
 	for _, hook := range h {
 		logger.AddHook(hook)
 	}
+	entry := utils.GetLogger(logger, fmt.Sprintf("%s", hash[0:11]), nil)
 	tr := &Routine{
 		client:    client,
 		isRunning: false,
-		buyer:     buyer,
 		ticket:    ticket,
 		ctx:       ctx,
 		cancel:    cancel,
-		logger:    logger,
+		logger:    entry,
 	}
 	logger.AddHook(hooks.NewRoutineHandlerHook(func(i int, fields logrus.Fields) {
 		if i == enums.Success || i == enums.Failed || i == enums.Error {
-			tr.isRunning = false
+			entry.Info("Ticket Routine stopped")
+			tr.setIsRunning(false)
+		}
+		if i == enums.Success && notify != nil {
+			notify.Notify(fmt.Sprintf("抢票成功！\n项目：%s\n场次：%s\n票种：%s\n购票人：%s\n购票用户：%s(%d)", ticket.ProjectName, ticket.ScreenName, ticket.SkuName, ticket.Buyer.String(), info.Name, info.UID))
 		}
 	}))
 	utils.RegisterLoggerFormater(logger)
-	return tr
+	entry.Info("Ticket Routine created")
+	return nil, tr
 }
 
 func (tr *Routine) Start() {
-	tr.mutex.Lock()
-	defer tr.mutex.Unlock()
-
-	if tr.isRunning {
+	tr.logger.Info("Ticket Routine started")
+	if tr.IsRunning() {
 		return
 	}
 
-	tr.isRunning = true
-	go run(tr.client, tr.buyer, tr.ticket, 500*time.Millisecond, tr.ctx, tr.logger)
+	tr.setIsRunning(true)
+	go run(tr.client, tr.ticket, 500*time.Millisecond, tr.ctx, tr.logger)
+}
+
+func (tr *Routine) setIsRunning(val bool) {
+	//tr.mutex.Lock()
+	//defer tr.mutex.Unlock()
+	tr.isRunning = val
 }
 
 func (tr *Routine) IsRunning() bool {
+	//tr.mutex.RLock()
+	//defer tr.mutex.RUnlock()
 	return tr.isRunning
 }
 
 func (tr *Routine) Stop() {
-	tr.mutex.Lock()
-	defer tr.mutex.Unlock()
-
-	if !tr.isRunning {
+	tr.logger.Info("Ticket Routine stopped")
+	if !tr.IsRunning() {
 		return
 	}
 
 	tr.cancel()
-	tr.isRunning = false
+	tr.setIsRunning(false)
 }
 
-func run(client *client.Client, buyer r.TicketBuyer, ticketData models.TicketEntry, interval time.Duration, ctx context.Context, mainLog *logrus.Logger) {
+func run(client *client.Client, ticketData models.TicketEntry, interval time.Duration, ctx context.Context, logger *logrus.Entry) {
 	pidString := strconv.FormatInt(ticketData.ProjectID, 10)
-	logger := utils.GetLogger(mainLog, fmt.Sprintf("%s", ticketData.Hash()[:11]), nil)
 	err, info := client.GetProjectInformation(pidString)
 	if err != nil {
 		logger.WithField("status", enums.Error).WithError(err).Error("GetProjectInformation err")
@@ -147,19 +179,19 @@ func run(client *client.Client, buyer r.TicketBuyer, ticketData models.TicketEnt
 				}
 				goto SLEEP
 			}
-			if buyer.BuyerType == enums.Ordinary {
+			if ticketData.Buyer.BuyerType == enums.Ordinary {
 				buyerInterface = map[string]string{
-					"tel":  buyer.Tel,
-					"name": buyer.Name,
+					"tel":  ticketData.Buyer.Tel,
+					"name": ticketData.Buyer.Name,
 				}
-			} else if buyer.BuyerType == enums.ForceRealName {
+			} else if ticketData.Buyer.BuyerType == enums.ForceRealName {
 				err, confirm := client.GetConfirmInformation(tk, strconv.FormatInt(ticketData.ProjectID, 10))
 				if err != nil {
 					logger.WithField("status", enums.Error).WithError(err).Errorf("GetConfirmInformation err: %v", err)
 					goto SLEEP
 				}
 				for _, b := range confirm.BuyerList.List {
-					if b.Id == buyer.ID {
+					if b.Id == ticketData.Buyer.ID {
 						buyerInterface = b
 					}
 				}
@@ -168,7 +200,7 @@ func run(client *client.Client, buyer r.TicketBuyer, ticketData models.TicketEnt
 					return
 				}
 			}
-			err, code, msg, to = client.SubmitOrder(tokenGen, whenGenPtoken, tk, pidString, *ticket, buyerInterface, buyer.BuyerType)
+			err, code, msg, to = client.SubmitOrder(tokenGen, whenGenPtoken, tk, pidString, *ticket, buyerInterface, ticketData.Buyer.BuyerType)
 			if err != nil {
 				logger.WithField("status", enums.Error).WithError(err).Errorf("SubmitOrder err: %v", err)
 				goto SLEEP
